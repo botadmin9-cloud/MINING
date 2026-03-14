@@ -1,14 +1,18 @@
+"""
+🤖 Mining Bot v3 — Main Entry Point
+"""
 import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 
-from config import BOT_TOKEN
+from config import BOT_TOKEN, ADMIN_IDS
 from database import init_db
 from handlers import (start, mining, shop, profile, inventory,
                        equipment, daily, leaderboard, help,
-                       admin, market)
+                       admin, market, bag, favorite_museum)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,15 +20,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Perintah untuk semua pemain ──────────────────────────────
+PLAYER_COMMANDS = [
+    BotCommand(command="start",       description="🏠 Menu utama"),
+    BotCommand(command="mine",        description="⛏️ Mining"),
+    BotCommand(command="bag",         description="🎒 Lihat & kelola ore"),
+    BotCommand(command="profile",     description="👤 Profil kamu"),
+    BotCommand(command="shop",        description="🏪 Toko alat & item"),
+    BotCommand(command="inventory",   description="🎁 Inventaris item"),
+    BotCommand(command="equipment",   description="🔧 Peralatan"),
+    BotCommand(command="market",      description="🛒 Market jual beli ore"),
+    BotCommand(command="daily",       description="🎁 Bonus harian"),
+    BotCommand(command="leaderboard", description="🏆 Papan peringkat"),
+    BotCommand(command="favorite",    description="⭐ Ore favorit"),
+    BotCommand(command="museum",      description="🏛️ Museum ore langka"),
+    BotCommand(command="buyenergy",   description="⚡ Beli tambahan max energy"),
+    BotCommand(command="buyslot",     description="🎒 Beli tambahan slot bag"),
+    BotCommand(command="help",        description="❓ Panduan bermain"),
+]
+
+# ── Perintah tambahan untuk admin (ditambahkan di atas player commands) ──
+ADMIN_EXTRA_COMMANDS = [
+    BotCommand(command="adminhelp",             description="🔐 Panel admin"),
+    BotCommand(command="admin_stats",           description="📊 Statistik bot"),
+    BotCommand(command="admin_users",           description="👥 Daftar user"),
+    BotCommand(command="admin_broadcast",       description="📢 Broadcast pesan"),
+    BotCommand(command="admin_info",            description="👤 Info user"),
+    BotCommand(command="admin_addcoin",         description="💰 Tambah koin user"),
+    BotCommand(command="admin_setlevel",        description="⭐ Set level user"),
+    BotCommand(command="admin_setenergy",       description="⚡ Set energy user"),
+    BotCommand(command="admin_givetool",        description="🔧 Beri alat ke user"),
+    BotCommand(command="admin_giveitem",        description="🎁 Beri item ke user"),
+    BotCommand(command="admin_givezone",        description="🌍 Buka zona untuk user"),
+    BotCommand(command="admin_reset",           description="🔄 Reset data user"),
+    BotCommand(command="admin_setorephoto",     description="📸 Pasang foto ore"),
+    BotCommand(command="admin_listorephoto",    description="📸 Daftar foto ore"),
+    BotCommand(command="admin_delorephoto",     description="📸 Hapus foto ore"),
+    BotCommand(command="admin_tools",           description="🔧 Daftar tool_id"),
+    BotCommand(command="admin_items",           description="🎒 Daftar item_id"),
+    BotCommand(command="admin_zones",           description="🌍 Daftar zone_id"),
+    BotCommand(command="admin_ores",            description="🪨 Daftar ore_id"),
+]
+
+
+async def set_bot_commands(bot: Bot):
+    """Set perintah bot — pemain hanya lihat player commands, admin lihat semua."""
+    # Set untuk semua user (default)
+    await bot.set_my_commands(PLAYER_COMMANDS, scope=BotCommandScopeDefault())
+    # Set khusus untuk setiap admin (tampilkan semua perintah)
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.set_my_commands(
+                PLAYER_COMMANDS + ADMIN_EXTRA_COMMANDS,
+                scope=BotCommandScopeChat(chat_id=admin_id)
+            )
+        except Exception as e:
+            logger.warning(f"Gagal set commands untuk admin {admin_id}: {e}")
+
 
 async def main():
     await init_db()
-    logger.info("✅ Database initialized")
+    logger.info("✅ Database initialized (v3)")
 
     bot = Bot(token=BOT_TOKEN)
     dp  = Dispatcher(storage=MemoryStorage())
 
-    # Register all routers
+    # Register semua router
     dp.include_router(start.router)
     dp.include_router(mining.router)
     dp.include_router(shop.router)
@@ -36,8 +97,14 @@ async def main():
     dp.include_router(help.router)
     dp.include_router(admin.router)
     dp.include_router(market.router)
+    dp.include_router(bag.router)
+    dp.include_router(favorite_museum.router)
 
-    logger.info("🤖 Mining Bot v2 starting...")
+    # Set bot commands di Telegram
+    await set_bot_commands(bot)
+    logger.info("✅ Bot commands set")
+
+    logger.info("🤖 Mining Bot v3 starting...")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
