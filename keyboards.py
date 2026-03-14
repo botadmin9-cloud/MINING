@@ -11,11 +11,12 @@ from config import TOOLS, ITEMS, ZONES, TIER_COLORS
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="⛏️ Mining"),    KeyboardButton(text="👤 Profil")],
-            [KeyboardButton(text="🎒 Equipment"), KeyboardButton(text="🎁 Inventaris")],
-            [KeyboardButton(text="🏪 Shop"),      KeyboardButton(text="🏆 Leaderboard")],
-            [KeyboardButton(text="🎁 Daily"),     KeyboardButton(text="🛒 Market")],
-            [KeyboardButton(text="❓ Bantuan")],
+            [KeyboardButton(text="⛏️ Mining"),      KeyboardButton(text="👤 Profil")],
+            [KeyboardButton(text="🎒 Equipment"),    KeyboardButton(text="🎁 Inventaris")],
+            [KeyboardButton(text="🏪 Shop"),          KeyboardButton(text="🏆 Leaderboard")],
+            [KeyboardButton(text="🎁 Daily"),         KeyboardButton(text="🛒 Market")],
+            [KeyboardButton(text="🎒 Bag"),           KeyboardButton(text="⭐ Favorit")],
+            [KeyboardButton(text="🏛️ Museum"),        KeyboardButton(text="❓ Bantuan")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Pilih menu..."
