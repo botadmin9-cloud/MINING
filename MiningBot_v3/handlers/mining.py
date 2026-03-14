@@ -1,6 +1,3 @@
-"""
-⛏️ Mining Handler v2 — Fixed x5/x10, cooldown, speed system
-"""
 import asyncio
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
