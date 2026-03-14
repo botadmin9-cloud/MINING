@@ -1,6 +1,3 @@
-"""
-❓ Help Handler v2 — Tanpa referral, dengan info market & ore inventory
-"""
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
