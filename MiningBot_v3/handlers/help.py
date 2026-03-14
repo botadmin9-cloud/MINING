@@ -1,6 +1,3 @@
-"""
-❓ Help Handler v3 — Menu lengkap, bag, energy, slot, favorit, museum
-"""
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
