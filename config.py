@@ -1,3 +1,7 @@
+"""
+⚙️ CONFIG — Semua pengaturan game Mining Bot v2
+   Edit file ini untuk kustomisasi game
+"""
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -5,7 +9,7 @@ load_dotenv()
 # ══════════════════════════════════════════════════════════════
 # 🔑 CREDENTIALS
 # ══════════════════════════════════════════════════════════════
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8423250634:AAFY0bMwALbw3N7s-vwD4WAYujruhMSA44w")
 
 # ID Telegram admin (pisahkan dengan koma di env: "123,456")
 _raw_admins = os.getenv("577381,7573097201")
@@ -16,19 +20,32 @@ DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
 # ══════════════════════════════════════════════════════════════
 # 💰 EKONOMI GAME
 # ══════════════════════════════════════════════════════════════
-STARTING_BALANCE   = 500        # Koin awal pemain baru
+STARTING_BALANCE   = 0          # Koin awal pemain baru
 DAILY_BONUS_BASE   = 100        # Bonus harian dasar
 DAILY_BONUS_LEVEL  = 10         # +X koin per level
-ENERGY_REGEN_RATE  = 10         # Energy regen per 10 menit (1 energy per 10 menit)
-ENERGY_COOLDOWN_MINUTES = 10    # Cooldown energy = 10 menit per 1 energy
-MAX_ENERGY_BASE    = 100        # Max energy default
-LUCKY_CHANCE       = 0.05       # 5% base lucky strike
-CRITICAL_CHANCE    = 0.10       # 10% critical hit (2x coins)
+ENERGY_REGEN_RATE  = 10         # Energy regen per 10 menit ( 50 energy per 1 menit)
+ENERGY_COOLDOWN_MINUTES = 10    # Cooldown energy = 1 menit per 50 energy
+MAX_ENERGY_BASE    = 500        # Max energy default (dimulai 500)
+
+# ══════════════════════════════════════════════════════════════
+# 🎒 BAG (Ore Inventory Slot)
+# ══════════════════════════════════════════════════════════════
+BAG_SLOT_DEFAULT   = 50          # Slot awal bag
+BAG_SLOT_MAX       = 350         # Slot maksimal bag
+BAG_SLOT_STEP      = 50          # Tambah slot per upgrade
+BAG_SLOT_BASE_COST = 100000      # Harga upgrade slot pertama (naik setiap upgrade)
+
+# ══════════════════════════════════════════════════════════════
+# ⚡ ENERGY UPGRADE (via /buyenergy)
+# ══════════════════════════════════════════════════════════════
+ENERGY_UPGRADE_MAX      = 5000   # Max energy setelah upgrade
+ENERGY_UPGRADE_STEP     = 100    # Tambah max energy per upgrade
+ENERGY_UPGRADE_BASE_COST = 5000  # Harga upgrade energy pertama (naik bertahap)
 
 # ══════════════════════════════════════════════════════════════
 # ⛏️ PERALATAN MINING — Dari GRATIS hingga MYTHICAL
-# Speed mining: murah = lama, mahal = cepat. Maks 5 detik (cooldown antar mine)
-# speed_delay = detik tunggu antar mine (lebih kecil = lebih cepat)
+# Speed mining: murah = lama, mahal = cepat. Maks 4 detik (cooldown antar mine)
+# speed_delay = detik tunggu antar mine (lebih kecil = lebih lama)
 # ══════════════════════════════════════════════════════════════
 TOOLS: dict = {
 
@@ -42,7 +59,7 @@ TOOLS: dict = {
         "power":         2,
         "energy_cost":   10,
         "speed_mult":    1.0,
-        "speed_delay":   60,     # 60 detik per mine (paling lambat)
+        "speed_delay":   6,     # 6 detik per mine (paling lambat)
         "crit_bonus":    0.0,
         "luck_bonus":    0.0,
         "description":   "Beliung batu klasik. Gratis untuk semua pemain!",
@@ -62,7 +79,7 @@ TOOLS: dict = {
         "power":         5,
         "energy_cost":   9,
         "speed_mult":    1.1,
-        "speed_delay":   50,
+        "speed_delay":   6,
         "crit_bonus":    0.02,
         "luck_bonus":    0.0,
         "description":   "Beliung tembaga ringan. Power +5, sedikit lebih cepat.",
@@ -80,7 +97,7 @@ TOOLS: dict = {
         "power":         12,
         "energy_cost":   8,
         "speed_mult":    1.2,
-        "speed_delay":   45,
+        "speed_delay":   6,
         "crit_bonus":    0.03,
         "luck_bonus":    0.01,
         "description":   "Beliung besi kokoh. Power +12, efisiensi lebih baik.",
@@ -98,7 +115,7 @@ TOOLS: dict = {
         "power":         20,
         "energy_cost":   8,
         "speed_mult":    1.3,
-        "speed_delay":   40,
+        "speed_delay":   6,
         "crit_bonus":    0.04,
         "luck_bonus":    0.02,
         "description":   "Beliung perak berkilau. Sedikit lebih beruntung.",
@@ -118,7 +135,7 @@ TOOLS: dict = {
         "power":         28,
         "energy_cost":   12,
         "speed_mult":    1.5,
-        "speed_delay":   35,
+        "speed_delay":   6,
         "crit_bonus":    0.05,
         "luck_bonus":    0.02,
         "description":   "Bor baja mekanik. Power +28, bisa menembus batuan keras.",
@@ -136,7 +153,7 @@ TOOLS: dict = {
         "power":         55,
         "energy_cost":   14,
         "speed_mult":    1.8,
-        "speed_delay":   30,
+        "speed_delay":   6,
         "crit_bonus":    0.06,
         "luck_bonus":    0.03,
         "description":   "Bor bertenaga listrik. Power +55, kecepatan meningkat drastis!",
@@ -154,7 +171,7 @@ TOOLS: dict = {
         "power":         80,
         "energy_cost":   13,
         "speed_mult":    2.0,
-        "speed_delay":   25,
+        "speed_delay":   6,
         "crit_bonus":    0.07,
         "luck_bonus":    0.04,
         "description":   "Bor sonik yang menggunakan gelombang suara. Sangat efisien!",
@@ -174,7 +191,7 @@ TOOLS: dict = {
         "power":         120,
         "energy_cost":   18,
         "speed_mult":    2.2,
-        "speed_delay":   22,
+        "speed_delay":   6,
         "crit_bonus":    0.08,
         "luck_bonus":    0.05,
         "description":   "Jackhammer pneumatik industri. Power +120, mengguncang tanah!",
@@ -192,7 +209,7 @@ TOOLS: dict = {
         "power":         250,
         "energy_cost":   20,
         "speed_mult":    2.5,
-        "speed_delay":   18,
+        "speed_delay":   6,
         "crit_bonus":    0.10,
         "luck_bonus":    0.07,
         "description":   "Mata bor berlapis berlian asli. Power +250, menembus apapun!",
@@ -210,7 +227,7 @@ TOOLS: dict = {
         "power":         400,
         "energy_cost":   19,
         "speed_mult":    2.7,
-        "speed_delay":   16,
+        "speed_delay":   6,
         "crit_bonus":    0.11,
         "luck_bonus":    0.08,
         "description":   "Bor titanium aero-grade. Lebih kuat dari berlian!",
@@ -230,7 +247,7 @@ TOOLS: dict = {
         "power":         500,
         "energy_cost":   22,
         "speed_mult":    2.8,
-        "speed_delay":   14,
+        "speed_delay":   5,
         "crit_bonus":    0.12,
         "luck_bonus":    0.10,
         "description":   "Pemotong laser presisi tinggi. Power +500, akurasi sempurna.",
@@ -248,7 +265,7 @@ TOOLS: dict = {
         "power":         1000,
         "energy_cost":   26,
         "speed_mult":    3.2,
-        "speed_delay":   12,
+        "speed_delay":   5,
         "crit_bonus":    0.15,
         "luck_bonus":    0.12,
         "description":   "Bor plasma futuristik. Power +1000, mengionisasi batuan!",
@@ -266,7 +283,7 @@ TOOLS: dict = {
         "power":         1800,
         "energy_cost":   24,
         "speed_mult":    3.5,
-        "speed_delay":   10,
+        "speed_delay":   5,
         "crit_bonus":    0.16,
         "luck_bonus":    0.13,
         "description":   "Ekstraktor berbasis foton cahaya. Ultra-cepat!",
@@ -286,7 +303,7 @@ TOOLS: dict = {
         "power":         2500,
         "energy_cost":   30,
         "speed_mult":    4.0,
-        "speed_delay":   8,
+        "speed_delay":   3,
         "crit_bonus":    0.18,
         "luck_bonus":    0.15,
         "description":   "Penambang kuantum ultra-canggih. Power +2500, manipulasi quantum!",
@@ -304,7 +321,7 @@ TOOLS: dict = {
         "power":         5000,
         "energy_cost":   35,
         "speed_mult":    5.0,
-        "speed_delay":   6,
+        "speed_delay":   3,
         "crit_bonus":    0.20,
         "luck_bonus":    0.20,
         "description":   "Ekstraktor lubang hitam. Power +5000, menyedot materi dari dimensi lain!",
@@ -322,7 +339,7 @@ TOOLS: dict = {
         "power":         9000,
         "energy_cost":   38,
         "speed_mult":    5.5,
-        "speed_delay":   5,    # 5 detik = speed maksimal
+        "speed_delay":   3,    # 3 detik = speed maksimal
         "crit_bonus":    0.22,
         "luck_bonus":    0.22,
         "description":   "Bor materi gelap dari luar galaksi. Kekuatan tak terbatas!",
@@ -342,7 +359,7 @@ TOOLS: dict = {
         "power":         12000,
         "energy_cost":   40,
         "speed_mult":    6.0,
-        "speed_delay":   5,    # 5 detik maksimal
+        "speed_delay":   2,    # 2 detik maksimal
         "crit_bonus":    0.25,
         "luck_bonus":    0.25,
         "description":   "Palu perang celestial dari surga. Power +12000, kekuatan dewa!",
@@ -360,7 +377,7 @@ TOOLS: dict = {
         "power":         30000,
         "energy_cost":   50,
         "speed_mult":    8.0,
-        "speed_delay":   5,
+        "speed_delay":   2,
         "crit_bonus":    0.30,
         "luck_bonus":    0.30,
         "description":   "Palu milik para dewa. Kekuatan tanpa batas!",
@@ -511,26 +528,26 @@ ITEMS: dict = {
 # 🏅 PRESTASI / ACHIEVEMENTS
 # ══════════════════════════════════════════════════════════════
 ACHIEVEMENTS: dict = {
-    "first_mine":      {"name": "🥇 Pertama Kali!",   "desc": "Lakukan mining pertama",          "reward": 50},
-    "mine_10":         {"name": "⛏️ Penambang Pemula", "desc": "Mining 10 kali",                  "reward": 100},
-    "mine_100":        {"name": "💪 Penambang Sejati",  "desc": "Mining 100 kali",                 "reward": 500},
-    "mine_1000":       {"name": "🏆 Master Miner",     "desc": "Mining 1000 kali",                "reward": 5000},
-    "mine_10000":      {"name": "👑 Legend Miner",     "desc": "Mining 10000 kali",               "reward": 50000},
-    "first_rare":      {"name": "🔮 Rare Hunter",      "desc": "Dapatkan ore rare pertama",       "reward": 300},
-    "rich_100k":       {"name": "💰 Orang Kaya",       "desc": "Kumpulkan 100.000 koin",          "reward": 1000},
-    "rich_1m":         {"name": "💎 Jutawan",           "desc": "Kumpulkan 1.000.000 koin",        "reward": 10000},
-    "rich_1b":         {"name": "🏦 Miliarder",        "desc": "Kumpulkan 1.000.000.000 koin",    "reward": 1000000},
-    "lvl_10":          {"name": "⭐ Bintang 10",       "desc": "Capai Level 10",                  "reward": 500},
-    "lvl_50":          {"name": "🌟 Bintang 50",       "desc": "Capai Level 50",                  "reward": 5000},
-    "lvl_100":         {"name": "💫 Century",           "desc": "Capai Level 100",                 "reward": 50000},
-    "lvl_200":         {"name": "🌙 Level 200",        "desc": "Capai Level 200",                 "reward": 200000},
-    "lvl_500":         {"name": "☀️ Level 500",        "desc": "Capai Level 500 — Level Maks!",   "reward": 1000000},
+    "first_mine":      {"name": "🥇 Pertama Kali!",   "desc": "Lakukan mining pertama",          "reward": 500},
+    "mine_10":         {"name": "⛏️ Penambang Pemula", "desc": "Mining 10 kali",                  "reward": 1000},
+    "mine_100":        {"name": "💪 Penambang Sejati",  "desc": "Mining 100 kali",                 "reward": 5000},
+    "mine_1000":       {"name": "🏆 Master Miner",     "desc": "Mining 1000 kali",                "reward": 50000},
+    "mine_10000":      {"name": "👑 Legend Miner",     "desc": "Mining 10000 kali",               "reward": 500000},
+    "first_rare":      {"name": "🔮 Rare Hunter",      "desc": "Dapatkan ore rare pertama",       "reward": 30000},
+    "rich_100k":       {"name": "💰 Orang Kaya",       "desc": "Kumpulkan 100.000 koin",          "reward": 10000},
+    "rich_1m":         {"name": "💎 Jutawan",           "desc": "Kumpulkan 1.000.000 koin",        "reward": 1000000},
+    "rich_1b":         {"name": "🏦 Miliarder",        "desc": "Kumpulkan 1.000.000.000 koin",    "reward": 10000000},
+    "lvl_10":          {"name": "⭐ Bintang 10",       "desc": "Capai Level 10",                  "reward": 5000},
+    "lvl_50":          {"name": "🌟 Bintang 50",       "desc": "Capai Level 50",                  "reward": 50000},
+    "lvl_100":         {"name": "💫 Century",           "desc": "Capai Level 100",                 "reward": 500000},
+    "lvl_200":         {"name": "🌙 Level 200",        "desc": "Capai Level 200",                 "reward": 2000000},
+    "lvl_500":         {"name": "☀️ Level 500",        "desc": "Capai Level 500 — Level Maks!",   "reward": 10000000},
     "void_shard":      {"name": "🌑 Void Seeker",      "desc": "Temukan Void Shard pertama",      "reward": 50000},
-    "daily_streak_7":  {"name": "🔥 7-Day Streak",     "desc": "Daily bonus 7 hari berturut",     "reward": 2000},
-    "daily_streak_30": {"name": "🌙 30-Day Streak",    "desc": "Daily bonus 30 hari berturut",    "reward": 20000},
-    "market_first":    {"name": "🏪 Pedagang Pertama", "desc": "Pertama kali jual ore di market", "reward": 1000},
-    "rebirth_1":       {"name": "🔄 Reborn",           "desc": "Lakukan rebirth pertama",         "reward": 10000},
-    "cosmic_find":     {"name": "🌠 Cosmic Hunter",    "desc": "Temukan Debu Kosmik",             "reward": 100000},
+    "daily_streak_7":  {"name": "🔥 7-Day Streak",     "desc": "Daily bonus 7 hari berturut",     "reward": 200000},
+    "daily_streak_30": {"name": "🌙 30-Day Streak",    "desc": "Daily bonus 30 hari berturut",    "reward": 2000000},
+    "market_first":    {"name": "🏪 Pedagang Pertama", "desc": "Pertama kali jual ore di market", "reward": 100000},
+    "rebirth_1":       {"name": "🔄 Reborn",           "desc": "Lakukan rebirth pertama",         "reward": 10000000},
+    "cosmic_find":     {"name": "🌠 Cosmic Hunter",    "desc": "Temukan Debu Kosmik",             "reward": 100000000},
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -558,28 +575,28 @@ ZONES: dict = {
         "desc": "Lebih banyak ore besi & perak. Gelap tapi kaya.",
         "level_req": 5,
         "ore_bonus": {"iron": 1.5, "silver": 1.3, "tin": 1.4},
-        "unlock_cost": 3000,
+        "unlock_cost": 30000,
     },
     "underground": {
         "name": "⛰️ Bawah Tanah",
         "desc": "Emas & safir lebih sering muncul. Ada quartz juga!",
         "level_req": 15,
         "ore_bonus": {"gold": 1.8, "sapphire": 1.5, "quartz": 1.6},
-        "unlock_cost": 30000,
+        "unlock_cost": 300000,
     },
     "lava_cave": {
         "name": "🌋 Gua Lava",
         "desc": "Rubi & berlian lebih melimpah! Berbahaya tapi menggiurkan.",
         "level_req": 25,
         "ore_bonus": {"ruby": 2.0, "diamond": 1.7, "topaz": 1.8},
-        "unlock_cost": 150000,
+        "unlock_cost": 1500000,
     },
     "crystal_cavern": {
         "name": "🔮 Cavern Kristal",
         "desc": "Ametis & mithril berlimpah! Opal langka juga ada.",
         "level_req": 40,
         "ore_bonus": {"amethyst": 2.5, "mythril": 2.0, "opal": 2.0},
-        "unlock_cost": 600000,
+        "unlock_cost": 3000000,
     },
     "void_realm": {
         "name": "🌑 Void Realm",
@@ -593,28 +610,28 @@ ZONES: dict = {
         "desc": "Reruntuhan peradaban kuno. Opal dan Mithril sangat banyak!",
         "level_req": 50,
         "ore_bonus": {"opal": 2.5, "mythril": 2.5, "amethyst": 2.0},
-        "unlock_cost": 2000000,
+        "unlock_cost": 7000000,
     },
     "sky_island": {
         "name": "☁️ Pulau Langit",
         "desc": "Pulau melayang di atas awan. Stardust dan Cosmic Dust bersinar!",
         "level_req": 75,
         "ore_bonus": {"stardust": 3.0, "cosmic_dust": 2.5, "void_shard": 2.0},
-        "unlock_cost": 20000000,
+        "unlock_cost": 10000000,
     },
     "deep_space": {
         "name": "🚀 Luar Angkasa",
         "desc": "Luar angkasa yang gelap. Nebula Ore dan Cosmic Dust melimpah!",
         "level_req": 100,
         "ore_bonus": {"cosmic_dust": 3.5, "nebula_ore": 3.0, "stardust": 2.5},
-        "unlock_cost": 100000000,
+        "unlock_cost": 12000000,
     },
     "time_rift": {
         "name": "⏳ Retakan Waktu",
         "desc": "Zona di luar dimensi waktu. Kristal Waktu sangat langka di sini!",
         "level_req": 150,
         "ore_bonus": {"time_crystal": 3.0, "nebula_ore": 2.5, "cosmic_dust": 2.0},
-        "unlock_cost": 500000000,
+        "unlock_cost": 15000000,
     },
 }
 
