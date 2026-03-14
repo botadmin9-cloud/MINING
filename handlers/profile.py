@@ -1,6 +1,3 @@
-"""
-👤 Profile Handler v2 — Dengan Telegram ID dan Ore Inventory
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
