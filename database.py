@@ -22,8 +22,9 @@ async def init_db():
             total_earned    INTEGER DEFAULT 0,
             total_mined     INTEGER DEFAULT 0,
             mine_count      INTEGER DEFAULT 0,
-            energy          INTEGER DEFAULT 100,
-            max_energy      INTEGER DEFAULT 100,
+            energy          INTEGER DEFAULT 500,
+            max_energy      INTEGER DEFAULT 500,
+            bag_slots       INTEGER DEFAULT 50,
             level           INTEGER DEFAULT 1,
             xp              INTEGER DEFAULT 0,
             rebirth_count   INTEGER DEFAULT 0,
@@ -36,6 +37,8 @@ async def init_db():
             active_buffs    TEXT    DEFAULT '{}',
             achievements    TEXT    DEFAULT '[]',
             ore_inventory   TEXT    DEFAULT '{}',
+            favorite_ores   TEXT    DEFAULT '[]',
+            museum_ores     TEXT    DEFAULT '[]',
             daily_streak    INTEGER DEFAULT 0,
             last_daily      TEXT    DEFAULT NULL,
             last_energy_regen TEXT  DEFAULT NULL,
@@ -96,6 +99,14 @@ async def init_db():
             uploaded_at TEXT    DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS ore_photos (
+            ore_id      TEXT    PRIMARY KEY,
+            photo_id    TEXT    NOT NULL,
+            caption     TEXT    DEFAULT '',
+            set_by      INTEGER NOT NULL,
+            updated_at  TEXT    DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE INDEX IF NOT EXISTS idx_mining_user   ON mining_log(user_id);
         CREATE INDEX IF NOT EXISTS idx_mining_ore    ON mining_log(ore_type);
         CREATE INDEX IF NOT EXISTS idx_users_total   ON users(total_mined);
@@ -103,14 +114,17 @@ async def init_db():
         CREATE INDEX IF NOT EXISTS idx_market_seller ON market_listings(seller_id);
         """)
         # Migration: tambah kolom baru jika belum ada
-        try:
-            await db.execute("ALTER TABLE users ADD COLUMN ore_inventory TEXT DEFAULT '{}'")
-        except Exception:
-            pass
-        try:
-            await db.execute("ALTER TABLE users ADD COLUMN last_mine_time TEXT DEFAULT NULL")
-        except Exception:
-            pass
+        for col_sql in [
+            "ALTER TABLE users ADD COLUMN ore_inventory TEXT DEFAULT '{}'",
+            "ALTER TABLE users ADD COLUMN last_mine_time TEXT DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN bag_slots INTEGER DEFAULT 50",
+            "ALTER TABLE users ADD COLUMN favorite_ores TEXT DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN museum_ores TEXT DEFAULT '[]'",
+        ]:
+            try:
+                await db.execute(col_sql)
+            except Exception:
+                pass
         await db.commit()
     logger.info("✅ DB initialized (v2)")
 
@@ -133,6 +147,10 @@ def _row_to_user(row) -> dict:
     d["active_buffs"]   = _loads(d.get("active_buffs"),   {})
     d["achievements"]   = _loads(d.get("achievements"),   [])
     d["ore_inventory"]  = _loads(d.get("ore_inventory"),  {})
+    d["favorite_ores"]  = _loads(d.get("favorite_ores"),  [])
+    d["museum_ores"]    = _loads(d.get("museum_ores"),     [])
+    if "bag_slots" not in d or d["bag_slots"] is None:
+        d["bag_slots"] = 50
     return d
 
 
@@ -164,7 +182,8 @@ async def update_user(user_id: int, **kwargs):
     if not kwargs:
         return
     for key in ("owned_tools", "unlocked_zones", "inventory",
-                "active_buffs", "achievements", "ore_inventory"):
+                "active_buffs", "achievements", "ore_inventory",
+                "favorite_ores", "museum_ores"):
         if key in kwargs:
             kwargs[key] = json.dumps(kwargs[key], ensure_ascii=False)
     cols = ", ".join(f"{k}=?" for k in kwargs)
@@ -432,3 +451,44 @@ async def get_total_users() -> int:
         async with db.execute("SELECT COUNT(*) FROM users") as cur:
             row = await cur.fetchone()
             return row[0] if row else 0
+
+
+# ─────────────────────────────────────────────────────────────
+# ORE PHOTOS (foto per jenis ore, dipasang admin)
+# ─────────────────────────────────────────────────────────────
+async def set_ore_photo(ore_id: str, photo_id: str, caption: str, admin_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO ore_photos (ore_id, photo_id, caption, set_by, updated_at)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(ore_id) DO UPDATE SET
+                 photo_id=excluded.photo_id,
+                 caption=excluded.caption,
+                 set_by=excluded.set_by,
+                 updated_at=excluded.updated_at""",
+            (ore_id, photo_id, caption, admin_id, datetime.now().isoformat())
+        )
+        await db.commit()
+    return True
+
+
+async def get_ore_photo(ore_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM ore_photos WHERE ore_id=?", (ore_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def get_all_ore_photos() -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM ore_photos ORDER BY ore_id") as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def delete_ore_photo(ore_id: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM ore_photos WHERE ore_id=?", (ore_id,))
+        await db.commit()
+    return True
