@@ -8,7 +8,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 
 # ID Telegram admin (pisahkan dengan koma di env: "123,456")
-_raw_admins = os.getenv("ADMIN_IDS", "")
+_raw_admins = os.getenv("577381", "7573097201")
 ADMIN_IDS: list[int] = [int(x.strip()) for x in _raw_admins.split(",") if x.strip().isdigit()]
 
 DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
