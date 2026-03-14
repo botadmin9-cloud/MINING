@@ -5,7 +5,8 @@ from aiogram.filters import Command
 from config import ADMIN_IDS, TOOLS, ITEMS, ZONES, MAX_LEVEL
 from database import (get_user, update_user, get_all_users, get_total_users,
                        add_balance, save_admin_photo, get_admin_photos,
-                       delete_admin_photo)
+                       delete_admin_photo, set_ore_photo, get_ore_photo,
+                       get_all_ore_photos, delete_ore_photo)
 from keyboards import admin_kb, back_main_kb
 
 router = Router()
@@ -48,10 +49,14 @@ async def cmd_adminhelp(message: Message):
         "`/admin_givezone <user_id> <zone_id>` — Buka zona\n"
         "`/admin_reset <user_id>` — Reset data user\n\n"
 
-        "📸 *Foto Admin:*\n"
-        "`/admin_setphoto` — Upload foto (reply foto dengan perintah ini)\n"
-        "`/admin_myphotos` — Lihat foto yang sudah diupload\n"
-        "`/admin_deletephoto <id>` — Hapus foto berdasarkan ID\n\n"
+        "📸 *Foto Admin & Ore:*\n"
+        "`/admin_setphoto` — Upload foto profil admin\n"
+        "`/admin_myphotos` — Lihat foto profil admin\n"
+        "`/admin_deletephoto <id>` — Hapus foto profil\n"
+        "`/admin_setorephoto <ore_id>` — Pasang foto untuk ORE tertentu\n"
+        "   _(reply foto dg perintah ini, atau kirim foto dg caption perintah)_\n"
+        "`/admin_listorephoto` — Lihat semua ore yg punya foto\n"
+        "`/admin_delorephoto <ore_id>` — Hapus foto ore\n\n"
 
         "📊 *Statistik:*\n"
         "`/admin_stats` — Statistik bot keseluruhan\n"
@@ -69,6 +74,7 @@ async def cmd_adminhelp(message: Message):
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "💡 *Tips:*\n"
         "• Gunakan Shop normal untuk beli tanpa bayar\n"
+        "• `/buyslot` dan `/buyenergy` gratis untuk admin\n"
         "• Admin otomatis terdeteksi dari ADMIN_IDS di .env\n"
         "• Tambah admin di Railway: `ADMIN\\_IDS=123456,789012`\n"
         "• Level maks rebirth = 500"
@@ -471,3 +477,144 @@ async def cmd_admin_users(message: Message):
     if len(users) > 20:
         lines.append(f"\n_...dan {len(users)-20} lainnya_")
     await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# /admin_setorephoto <ore_id> — Pasang foto untuk ORE tertentu
+# ══════════════════════════════════════════════════════════════
+@router.message(Command("admin_setorephoto"))
+async def cmd_setorephoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    parts = message.text.split()
+    ore_id_arg = parts[1] if len(parts) > 1 else None
+
+    # Ambil photo dari reply atau dari pesan itu sendiri
+    photo = None
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+    elif message.photo:
+        photo = message.photo[-1]
+
+    if not ore_id_arg:
+        await message.answer(
+            "📸 *Cara Pasang Foto Ore:*\n\n"
+            "1️⃣ Kirim foto, lalu *reply* dengan:\n"
+            "   `/admin_setorephoto <ore_id>`\n\n"
+            "2️⃣ Atau kirim foto dengan caption:\n"
+            "   `/admin_setorephoto <ore_id> [caption opsional]`\n\n"
+            "Contoh: `/admin_setorephoto diamond Berlian murni dari tambang`\n\n"
+            "Ketik `/admin_ores` untuk lihat daftar ore_id.",
+            parse_mode="Markdown"
+        )
+        return
+
+    if not photo:
+        await message.answer(
+            "❌ Tidak ada foto ditemukan!\n\n"
+            "Reply foto dengan `/admin_setorephoto <ore_id>` atau kirim foto dengan caption perintah ini.",
+            parse_mode="Markdown"
+        )
+        return
+
+    from config import ORES
+    ore = ORES.get(ore_id_arg)
+    if not ore:
+        await message.answer(
+            f"❌ Ore ID `{ore_id_arg}` tidak ditemukan!\n"
+            f"Ketik `/admin_ores` untuk lihat daftar ore_id.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Ambil caption opsional
+    caption = " ".join(parts[2:]) if len(parts) > 2 else ""
+    # Jika dari foto langsung dengan caption, ambil caption dari message.caption
+    if not caption and message.caption:
+        cap_parts = message.caption.split()
+        caption = " ".join(cap_parts[2:]) if len(cap_parts) > 2 else ""
+
+    await set_ore_photo(ore_id_arg, photo.file_id, caption, message.from_user.id)
+    await message.answer(
+        f"✅ *Foto Ore Berhasil Dipasang!*\n\n"
+        f"{ore['emoji']} *{ore['name']}* (`{ore_id_arg}`)\n"
+        f"📸 File ID: `{photo.file_id}`\n"
+        f"💬 Caption: {caption or '_(kosong)_'}\n\n"
+        f"Foto akan tampil saat pemain melihat detail ore ini di `/bag` atau Museum.",
+        parse_mode="Markdown"
+    )
+
+
+# Handler: kirim foto dengan caption /admin_setorephoto <ore_id>
+@router.message(F.photo & F.caption.regexp(r"^/admin_setorephoto"))
+async def cmd_setorephoto_direct(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    parts = message.caption.split() if message.caption else []
+    ore_id_arg = parts[1] if len(parts) > 1 else None
+    if not ore_id_arg:
+        await message.answer("❌ Sertakan ore_id. Contoh: `/admin_setorephoto diamond`", parse_mode="Markdown")
+        return
+
+    from config import ORES
+    ore = ORES.get(ore_id_arg)
+    if not ore:
+        await message.answer(f"❌ Ore ID `{ore_id_arg}` tidak ditemukan!", parse_mode="Markdown")
+        return
+
+    photo   = message.photo[-1]
+    caption = " ".join(parts[2:]) if len(parts) > 2 else ""
+    await set_ore_photo(ore_id_arg, photo.file_id, caption, message.from_user.id)
+    await message.answer(
+        f"✅ *Foto {ore['emoji']} {ore['name']} dipasang!*\n"
+        f"📸 File ID: `{photo.file_id}`",
+        parse_mode="Markdown"
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# /admin_listorephoto — Daftar ore yang punya foto
+# ══════════════════════════════════════════════════════════════
+@router.message(Command("admin_listorephoto"))
+async def cmd_listorephoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    photos = await get_all_ore_photos()
+    if not photos:
+        await message.answer("📸 Belum ada foto ore yang dipasang.", parse_mode="Markdown")
+        return
+    from config import ORES
+    lines = [f"📸 *Foto Ore yang Terpasang ({len(photos)}):*\n"]
+    for p in photos:
+        ore = ORES.get(p["ore_id"], {})
+        lines.append(
+            f"{ore.get('emoji','')} `{p['ore_id']}` — {ore.get('name', p['ore_id'])}\n"
+            f"   Caption: _{p.get('caption','') or '(kosong)_'}"
+        )
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# /admin_delorephoto <ore_id> — Hapus foto ore
+# ══════════════════════════════════════════════════════════════
+@router.message(Command("admin_delorephoto"))
+async def cmd_delorephoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Penggunaan: `/admin_delorephoto <ore_id>`", parse_mode="Markdown")
+        return
+    ore_id = parts[1]
+    photo = await get_ore_photo(ore_id)
+    if not photo:
+        await message.answer(f"❌ Tidak ada foto untuk ore `{ore_id}`.", parse_mode="Markdown")
+        return
+    await delete_ore_photo(ore_id)
+    from config import ORES
+    ore = ORES.get(ore_id, {})
+    await message.answer(
+        f"✅ Foto {ore.get('emoji','')} *{ore.get('name', ore_id)}* dihapus.",
+        parse_mode="Markdown"
+    )
