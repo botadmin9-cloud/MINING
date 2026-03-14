@@ -1,7 +1,3 @@
-"""
-⚙️ CONFIG — Semua pengaturan game Mining Bot v2
-   Edit file ini untuk kustomisasi game
-"""
 import os
 from dotenv import load_dotenv
 load_dotenv()
