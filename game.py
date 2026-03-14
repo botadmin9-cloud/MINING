@@ -164,7 +164,23 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
                 f"Energy kamu: `{user['energy']}/{user['max_energy']}`\n"
                 f"Dibutuhkan : `{energy_cost}` energy\n"
                 f"⏰ Energy penuh dalam: *{energy_full_in(user)}*\n\n"
-                f"💡 Gunakan ⚡ *Energy Potion* dari inventaris!"
+                f"💡 Gunakan ⚡ *Energy Potion* dari inventaris!\n"
+                f"💡 Atau beli tambahan energy: `/buyenergy`"
+            )
+        }
+
+    # Cek kapasitas bag
+    ore_inv = user.get("ore_inventory", {})
+    total_ore_in_bag = sum(ore_inv.values())
+    bag_slots = user.get("bag_slots", 50)
+    if not is_admin and total_ore_in_bag >= bag_slots:
+        return {
+            "ok": False,
+            "msg": (
+                f"🎒 *Bag penuh!*\n\n"
+                f"Kapasitas: `{total_ore_in_bag}/{bag_slots}` slot\n\n"
+                f"💡 Jual ore di *🛒 Market* atau gunakan `/bag` untuk kelola ore.\n"
+                f"💡 Tambah slot bag: `/buyslot`"
             )
         }
 
@@ -250,6 +266,10 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     # Tambah ore ke ore_inventory
     await add_ore_to_inventory(user_id, ore_id, 1)
 
+    # Hitung bag usage setelah tambah
+    user_after = await get_user(user_id)
+    bag_used = sum(user_after.get("ore_inventory", {}).values()) if user_after else 0
+
     await log_mine(user_id, tool_id, tool["name"], zone_id,
                    ore_id, ore["name"], coins, xp_gain,
                    is_crit, is_lucky, special_hit)
@@ -275,6 +295,8 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         "new_level":    new_level,
         "leveled_up":   leveled_up,
         "new_achievements": new_achievements,
+        "bag_used":     bag_used,
+        "bag_slots":    user.get("bag_slots", 50),
     }
 
 
@@ -322,6 +344,7 @@ def build_mine_result_text(r: dict) -> str:
         f"",
         f"⚡ Energy : {energy_bar} `{r['new_energy']}/{r['max_energy']}`",
         f"💰 Saldo  : `{r['new_balance']:,}` koin",
+        f"🎒 Bag    : `{r.get('bag_used',0)}/{r.get('bag_slots',50)}`",
     ]
 
     if r["leveled_up"]:
@@ -702,3 +725,90 @@ async def _grant_if_new(user_id: int, ach_id: str):
         await update_user(user_id, achievements=user["achievements"])
         return ach
     return None
+
+
+# ══════════════════════════════════════════════════════════════
+# BUY ENERGY UPGRADE
+# ══════════════════════════════════════════════════════════════
+async def buy_energy_upgrade(user_id: int, admin: bool = False) -> Tuple[bool, str]:
+    """Tambah max_energy sebesar ENERGY_UPGRADE_STEP. Harga naik tiap upgrade."""
+    from config import ENERGY_UPGRADE_MAX, ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_BASE_COST
+    user = await get_user(user_id)
+    if not user:
+        return False, "❌ User tidak ditemukan."
+
+    cur_max = user.get("max_energy", 500)
+    if cur_max >= ENERGY_UPGRADE_MAX:
+        return False, (
+            f"❌ *Max Energy sudah di batas maksimal!*\n"
+            f"Maksimal: `{ENERGY_UPGRADE_MAX}` energy"
+        )
+
+    # Harga naik setiap upgrade: base + (steps_done * 2000)
+    steps_done = (cur_max - 500) // ENERGY_UPGRADE_STEP
+    price = ENERGY_UPGRADE_BASE_COST + (steps_done * 2000)
+
+    if not admin and user["balance"] < price:
+        return False, (
+            f"❌ Koin tidak cukup!\n"
+            f"Butuh  : `{price:,}` koin\n"
+            f"Punya  : `{user['balance']:,}` koin"
+        )
+
+    new_max = min(cur_max + ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_MAX)
+    updates = {"max_energy": new_max}
+    if not admin:
+        updates["balance"] = user["balance"] - price
+    await update_user(user_id, **updates)
+
+    return True, (
+        f"✅ *Max Energy Ditingkatkan!*\n\n"
+        f"⚡ Max Energy : `{cur_max}` → `{new_max}`\n"
+        f"💰 Biaya      : `{price:,}` koin\n"
+        f"💰 Sisa saldo : `{updates.get('balance', user['balance']):,}` koin\n\n"
+        f"Upgrade berikutnya: `{ENERGY_UPGRADE_BASE_COST + (steps_done+1)*2000:,}` koin\n"
+        f"_(Max: {ENERGY_UPGRADE_MAX} energy)_"
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# BUY BAG SLOT
+# ══════════════════════════════════════════════════════════════
+async def buy_bag_slot(user_id: int, admin: bool = False) -> Tuple[bool, str]:
+    """Tambah bag_slots sebesar BAG_SLOT_STEP. Harga naik tiap upgrade."""
+    from config import BAG_SLOT_MAX, BAG_SLOT_STEP, BAG_SLOT_BASE_COST
+    user = await get_user(user_id)
+    if not user:
+        return False, "❌ User tidak ditemukan."
+
+    cur_slots = user.get("bag_slots", 50)
+    if cur_slots >= BAG_SLOT_MAX:
+        return False, (
+            f"❌ *Slot Bag sudah di batas maksimal!*\n"
+            f"Maksimal: `{BAG_SLOT_MAX}` slot"
+        )
+
+    steps_done = (cur_slots - 50) // BAG_SLOT_STEP
+    price = BAG_SLOT_BASE_COST + (steps_done * 500)
+
+    if not admin and user["balance"] < price:
+        return False, (
+            f"❌ Koin tidak cukup!\n"
+            f"Butuh  : `{price:,}` koin\n"
+            f"Punya  : `{user['balance']:,}` koin"
+        )
+
+    new_slots = min(cur_slots + BAG_SLOT_STEP, BAG_SLOT_MAX)
+    updates = {"bag_slots": new_slots}
+    if not admin:
+        updates["balance"] = user["balance"] - price
+    await update_user(user_id, **updates)
+
+    return True, (
+        f"✅ *Slot Bag Ditambah!*\n\n"
+        f"🎒 Slot Bag : `{cur_slots}` → `{new_slots}` slot\n"
+        f"💰 Biaya    : `{price:,}` koin\n"
+        f"💰 Saldo    : `{updates.get('balance', user['balance']):,}` koin\n\n"
+        f"Upgrade berikutnya: `{BAG_SLOT_BASE_COST + (steps_done+1)*500:,}` koin\n"
+        f"_(Max: {BAG_SLOT_MAX} slot)_"
+    )
