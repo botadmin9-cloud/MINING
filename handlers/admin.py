@@ -1,6 +1,3 @@
-"""
-🔐 Admin Handler v2 — Foto admin, free all, speed 1 detik, adminhelp disembunyikan dari non-admin
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, PhotoSize
 from aiogram.filters import Command
