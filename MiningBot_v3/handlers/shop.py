@@ -1,6 +1,3 @@
-"""
-🏪 Shop Handler v2 — Fixed item purchase, ore requirements display
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
