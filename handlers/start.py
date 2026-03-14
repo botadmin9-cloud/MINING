@@ -1,6 +1,3 @@
-"""
-🏠 Start Handler v2 — Tanpa referral link
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
