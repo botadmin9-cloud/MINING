@@ -1,6 +1,3 @@
-"""
-🤖 Mining Bot v3 — Main Entry Point
-"""
 import asyncio
 import logging
 
