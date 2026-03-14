@@ -1,10 +1,3 @@
-"""
-🎒 Bag Handler v3
-— /bag          : lihat ore inventory (50 slot default, maks 350)
-— /buyslot      : beli tambahan slot bag (+10 per upgrade)
-— /buyenergy    : beli tambahan max energy (+100 per upgrade, maks 5000)
-— Inline: jual 1 ore, jual semua jenis, jual semua bag
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
