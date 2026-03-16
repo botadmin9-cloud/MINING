@@ -1,3 +1,6 @@
+"""
+🛡️ Middlewares — Auto-create user on first message
+"""
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Message, CallbackQuery
 from typing import Callable, Dict, Any, Awaitable
