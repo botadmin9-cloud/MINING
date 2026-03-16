@@ -1,42 +1,64 @@
+"""
+🎒 Bag Handler v4 ULTIMATE
+— /bag          : lihat ore inventory dengan info KG
+— /buyslot      : beli tambahan slot bag
+— /buykg        : upgrade kapasitas KG bag
+— /buyenergy    : beli tambahan max energy
+— Harga jual ore BERBASIS KG (ore lebih berat = lebih mahal)
+"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 
 from config import (ORES, ADMIN_IDS,
                     BAG_SLOT_DEFAULT, BAG_SLOT_MAX, BAG_SLOT_STEP, BAG_SLOT_BASE_COST,
-                    ENERGY_UPGRADE_MAX, ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_BASE_COST)
+                    ENERGY_UPGRADE_MAX, ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_BASE_COST,
+                    BAG_KG_DEFAULT, BAG_KG_MAX, BAG_KG_UPGRADE_STEP, BAG_KG_UPGRADE_COST,
+                    calculate_sell_price, get_random_kg, format_kg)
 from database import get_user, update_user, remove_ore_from_inventory, add_balance
-from game import buy_bag_slot, buy_energy_upgrade
+from game import buy_bag_slot, buy_energy_upgrade, buy_bag_kg
 from keyboards import back_main_kb
 
 router = Router()
-
-BAG_PAGE_SIZE = 10   # ore per halaman
+BAG_PAGE_SIZE = 10
 
 
 def _is_admin(uid: int) -> bool:
     return uid in ADMIN_IDS
 
 
-# ══════════════════════════════════════════════════════════════
-# HELPERS
-# ══════════════════════════════════════════════════════════════
 def _ore_value(ore_id: str) -> int:
     return ORES.get(ore_id, {}).get("value", 0)
 
 
-def _bag_kb(ore_items: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
-    """ore_items = [(ore_id, qty), ...]  sudah di-slice ke halaman ini."""
+def _get_ore_avg_kg(user: dict, ore_id: str) -> float:
+    """Ambil rata-rata KG ore dari ore_kg_data."""
+    ore_inv = user.get("ore_inventory", {})
+    ore_kg_data = user.get("ore_kg_data", {})
+    qty = ore_inv.get(ore_id, 0)
+    total_kg = ore_kg_data.get(ore_id, 0.0)
+    if qty > 0 and total_kg > 0:
+        return round(total_kg / qty, 2)
+    # Fallback ke midpoint
+    ore = ORES.get(ore_id, {})
+    return round((ore.get("kg_min", 0.5) + ore.get("kg_max", 2.0)) / 2, 2)
+
+
+def _estimated_sell_price(user: dict, ore_id: str, qty: int = 1) -> int:
+    avg_kg = _get_ore_avg_kg(user, ore_id)
+    return calculate_sell_price(ore_id, avg_kg) * qty
+
+
+def _bag_kb(ore_items: list, page: int, total_pages: int, user: dict) -> InlineKeyboardMarkup:
     rows = []
     for ore_id, qty in ore_items:
         ore = ORES.get(ore_id, {})
-        label = f"{ore.get('emoji','')} {ore.get('name', ore_id)} x{qty}"
+        avg_kg = _get_ore_avg_kg(user, ore_id)
+        label = f"{ore.get('emoji','')} {ore.get('name', ore_id)} x{qty} (~{format_kg(avg_kg*qty)})"
         rows.append([
-            InlineKeyboardButton(text=label,            callback_data=f"bag_detail_{ore_id}"),
-            InlineKeyboardButton(text="💰 Jual 1",      callback_data=f"bag_sell1_{ore_id}"),
-            InlineKeyboardButton(text="💰 Jual Semua",  callback_data=f"bag_sellall_{ore_id}"),
+            InlineKeyboardButton(text=label,             callback_data=f"bag_detail_{ore_id}"),
+            InlineKeyboardButton(text="💰 Jual 1",       callback_data=f"bag_sell1_{ore_id}"),
+            InlineKeyboardButton(text="💰 Jual Semua",   callback_data=f"bag_sellall_{ore_id}"),
         ])
 
     nav = []
@@ -56,35 +78,35 @@ def _bag_kb(ore_items: list, page: int, total_pages: int) -> InlineKeyboardMarku
 
 
 async def _bag_text(user: dict, page: int) -> tuple:
-    """Returns (text, kb, sorted_items, total_pages)"""
     ore_inv = {k: v for k, v in user.get("ore_inventory", {}).items() if v > 0}
-    # sort by ore value descending
     sorted_items = sorted(ore_inv.items(), key=lambda x: _ore_value(x[0]), reverse=True)
 
     total_qty   = sum(v for _, v in sorted_items)
     bag_slots   = user.get("bag_slots", BAG_SLOT_DEFAULT)
+    bag_kg_used = user.get("bag_kg_used", 0.0)
+    bag_kg_max  = user.get("bag_kg_max", BAG_KG_DEFAULT)
     total_pages = max(1, (len(sorted_items) + BAG_PAGE_SIZE - 1) // BAG_PAGE_SIZE)
     page        = max(0, min(page, total_pages - 1))
 
     chunk = sorted_items[page * BAG_PAGE_SIZE : (page + 1) * BAG_PAGE_SIZE]
 
-    est_value = sum(_ore_value(oid) * qty for oid, qty in sorted_items)
+    # Estimasi nilai jual berdasarkan KG
+    est_value = sum(_estimated_sell_price(user, oid, qty) for oid, qty in sorted_items)
 
     text = (
         f"🎒 *Bag Ore Kamu*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"📦 Slot    : `{total_qty}/{bag_slots}`\n"
+        f"⚖️ Berat   : `{format_kg(bag_kg_used)}/{format_kg(bag_kg_max)}`\n"
         f"🪨 Jenis   : `{len(sorted_items)}`\n"
-        f"💰 Est.Nilai: `{est_value:,}` koin\n\n"
+        f"💰 Est.Jual: `{est_value:,}` koin\n\n"
+        f"💡 Harga jual = nilai ore × berat (kg) × 1.5\n\n"
         f"Klik ore untuk detail, atau langsung jual:"
     )
-    kb = _bag_kb(chunk, page, total_pages)
+    kb = _bag_kb(chunk, page, total_pages, user)
     return text, kb, sorted_items, total_pages
 
 
-# ══════════════════════════════════════════════════════════════
-# /bag  &  🎒 Bag  button
-# ══════════════════════════════════════════════════════════════
 @router.message(F.text == "🎒 Bag")
 @router.message(Command("bag"))
 async def cmd_bag(message: Message):
@@ -114,7 +136,6 @@ async def cb_bag_page(callback: CallbackQuery):
     await callback.answer()
 
 
-# ── Detail ore di bag ─────────────────────────────────────────
 @router.callback_query(F.data.startswith("bag_detail_"))
 async def cb_bag_detail(callback: CallbackQuery):
     ore_id = callback.data.replace("bag_detail_", "")
@@ -125,14 +146,17 @@ async def cb_bag_detail(callback: CallbackQuery):
         return
 
     qty     = user.get("ore_inventory", {}).get(ore_id, 0)
+    avg_kg  = _get_ore_avg_kg(user, ore_id)
+    total_kg = round(avg_kg * qty, 2)
+    sell_1  = calculate_sell_price(ore_id, avg_kg)
+    sell_all = sell_1 * qty
     fav     = user.get("favorite_ores", [])
     museum  = user.get("museum_ores", [])
     in_fav  = ore_id in fav
     in_mus  = ore_id in museum
 
-    # Cek apakah ada foto ore
-    from database import get_ore_photo
-    photo = await get_ore_photo(ore_id)
+    from config import ORE_TIER_COLORS
+    tier_color = ORE_TIER_COLORS.get(ore.get("tier", "common"), "⬜")
 
     rows = [
         [
@@ -154,26 +178,24 @@ async def cb_bag_detail(callback: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=rows)
 
     text = (
-        f"{ore['emoji']} *{ore['name']}*\n"
+        f"{tier_color} {ore['emoji']} *{ore['name']}*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"📝 _{ore.get('desc','')}_\n\n"
-        f"📦 Kamu punya : `{qty}` buah\n"
-        f"💰 Nilai/buah : `{ore['value']:,}` koin\n"
-        f"💰 Total est. : `{ore['value'] * qty:,}` koin\n"
-        f"✨ Raritas    : `{ore['rarity']}%`\n\n"
+        f"📝 _{ore.get('desc','')}_ \n\n"
+        f"📦 Kamu punya     : `{qty}` buah\n"
+        f"⚖️ Berat rata-rata : `{format_kg(avg_kg)}` /buah\n"
+        f"⚖️ Total berat    : `{format_kg(total_kg)}`\n"
+        f"💰 Harga jual/bh  : `{sell_1:,}` koin\n"
+        f"💰 Harga jual semua: `{sell_all:,}` koin\n\n"
+        f"📊 Rentang berat: `{format_kg(ore.get('kg_min',0))}` — `{format_kg(ore.get('kg_max',5))}`\n"
+        f"✨ Raritas       : `{ore['rarity']}%`\n\n"
         f"{'⭐ Ada di Favorit' if in_fav else ''}"
         f"{'  🏛️ Ada di Museum' if in_mus else ''}"
     )
 
-    if photo:
-        await callback.message.answer_photo(
-            photo=photo["photo_id"],
-            caption=text,
-            reply_markup=kb,
-            parse_mode="Markdown"
-        )
-    else:
+    try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 
@@ -191,7 +213,6 @@ async def cb_bag_back(callback: CallbackQuery):
     await callback.answer()
 
 
-# ── Jual 1 ore ────────────────────────────────────────────────
 @router.callback_query(F.data.startswith("bag_sell1_"))
 async def cb_bag_sell1(callback: CallbackQuery):
     ore_id = callback.data.replace("bag_sell1_", "")
@@ -206,25 +227,45 @@ async def cb_bag_sell1(callback: CallbackQuery):
         await callback.answer("❌ Ore sudah habis!", show_alert=True)
         return
 
-    ok = await remove_ore_from_inventory(callback.from_user.id, ore_id, 1)
-    if not ok:
-        await callback.answer("❌ Gagal menjual!", show_alert=True)
-        return
+    # Hitung harga berdasarkan rata-rata KG
+    avg_kg = _get_ore_avg_kg(user, ore_id)
+    coins  = calculate_sell_price(ore_id, avg_kg)
 
-    coins = ore["value"]
-    await add_balance(callback.from_user.id, coins, f"Jual {ore['name']} x1 dari bag")
-    await callback.answer(f"✅ +{coins:,} koin dari {ore['name']}", show_alert=False)
+    # Kurangi qty dan kg
+    ore_inv = dict(user.get("ore_inventory", {}))
+    ore_kg_data = dict(user.get("ore_kg_data", {}))
+    ore_inv[ore_id] = ore_inv.get(ore_id, 0) - 1
+    if ore_inv[ore_id] <= 0:
+        del ore_inv[ore_id]
+    # Kurangi KG proporsional
+    if ore_id in ore_kg_data:
+        ore_kg_data[ore_id] = max(0.0, round(ore_kg_data[ore_id] - avg_kg, 2))
+        if ore_kg_data[ore_id] <= 0:
+            del ore_kg_data[ore_id]
+    # Update bag_kg_used
+    new_kg_used = max(0.0, round(user.get("bag_kg_used", 0.0) - avg_kg, 2))
+    await update_user(callback.from_user.id,
+                      ore_inventory=ore_inv,
+                      ore_kg_data=ore_kg_data,
+                      bag_kg_used=new_kg_used)
+    await add_balance(callback.from_user.id, coins, f"Jual {ore['name']} x1 ({format_kg(avg_kg)})")
 
-    # refresh bag
+    await callback.answer(f"✅ +{coins:,} koin dari {ore['name']} ({format_kg(avg_kg)})", show_alert=False)
+
     user = await get_user(callback.from_user.id)
-    text, kb, _, _ = await _bag_text(user, 0)
-    try:
-        await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
-    except Exception:
-        pass
+    if user and any(v > 0 for v in user.get("ore_inventory", {}).values()):
+        text, kb, _, _ = await _bag_text(user, 0)
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass
+    else:
+        await callback.message.edit_text(
+            "🎒 *Bag Kamu Kosong*\n\nMulai mining untuk mengisi bag!",
+            reply_markup=back_main_kb(), parse_mode="Markdown"
+        )
 
 
-# ── Jual Semua (satu jenis ore) ───────────────────────────────
 @router.callback_query(F.data.startswith("bag_sellall_"))
 async def cb_bag_sellall(callback: CallbackQuery):
     ore_id = callback.data.replace("bag_sellall_", "")
@@ -239,24 +280,44 @@ async def cb_bag_sellall(callback: CallbackQuery):
         await callback.answer("❌ Ore sudah habis!", show_alert=True)
         return
 
-    ok = await remove_ore_from_inventory(callback.from_user.id, ore_id, qty)
-    if not ok:
-        await callback.answer("❌ Gagal menjual!", show_alert=True)
-        return
+    # Harga berdasarkan TOTAL KG semua ore jenis ini
+    ore_kg_data = user.get("ore_kg_data", {})
+    total_kg_this_ore = ore_kg_data.get(ore_id, 0.0)
+    if total_kg_this_ore <= 0:
+        avg_kg = _get_ore_avg_kg(user, ore_id)
+        total_kg_this_ore = avg_kg * qty
+    coins = calculate_sell_price(ore_id, total_kg_this_ore)
 
-    coins = ore["value"] * qty
-    await add_balance(callback.from_user.id, coins, f"Jual {ore['name']} x{qty} dari bag")
-    await callback.answer(f"✅ +{coins:,} koin dari {qty}x {ore['name']}", show_alert=True)
+    # Hapus ore dari inventory
+    ore_inv = dict(user.get("ore_inventory", {}))
+    if ore_id in ore_inv:
+        del ore_inv[ore_id]
+    if ore_id in ore_kg_data:
+        del ore_kg_data[ore_id]
+    new_kg_used = max(0.0, round(user.get("bag_kg_used", 0.0) - total_kg_this_ore, 2))
+
+    await update_user(callback.from_user.id,
+                      ore_inventory=ore_inv,
+                      ore_kg_data=ore_kg_data,
+                      bag_kg_used=new_kg_used)
+    await add_balance(callback.from_user.id, coins, f"Jual {ore['name']} x{qty} ({format_kg(total_kg_this_ore)})")
+
+    await callback.answer(f"✅ +{coins:,} koin dari {qty}x {ore['name']} ({format_kg(total_kg_this_ore)})", show_alert=True)
 
     user = await get_user(callback.from_user.id)
-    text, kb, _, _ = await _bag_text(user, 0)
-    try:
-        await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
-    except Exception:
-        pass
+    if user and any(v > 0 for v in user.get("ore_inventory", {}).values()):
+        text, kb, _, _ = await _bag_text(user, 0)
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass
+    else:
+        await callback.message.edit_text(
+            "🎒 *Bag Kamu Kosong*\n\nMulai mining untuk mengisi bag!",
+            reply_markup=back_main_kb(), parse_mode="Markdown"
+        )
 
 
-# ── Jual SEMUA isi bag ────────────────────────────────────────
 @router.callback_query(F.data == "bag_sell_everything")
 async def cb_bag_sell_everything(callback: CallbackQuery):
     user = await get_user(callback.from_user.id)
@@ -269,21 +330,28 @@ async def cb_bag_sell_everything(callback: CallbackQuery):
         await callback.answer("❌ Bag sudah kosong!", show_alert=True)
         return
 
+    ore_kg_data = user.get("ore_kg_data", {})
     total_coins = 0
     total_items = 0
-    for ore_id, qty in ore_inv.items():
-        ore = ORES.get(ore_id, {})
-        total_coins += ore.get("value", 0) * qty
-        total_items += qty
+    total_weight = 0.0
 
-    # Kosongkan ore_inventory
-    await update_user(callback.from_user.id, ore_inventory={})
-    await add_balance(callback.from_user.id, total_coins, f"Jual semua bag ({total_items} ore)")
+    for ore_id, qty in ore_inv.items():
+        total_items += qty
+        total_kg_this = ore_kg_data.get(ore_id, 0.0)
+        if total_kg_this <= 0:
+            avg = _get_ore_avg_kg(user, ore_id)
+            total_kg_this = avg * qty
+        total_weight += total_kg_this
+        total_coins += calculate_sell_price(ore_id, total_kg_this)
+
+    await update_user(callback.from_user.id, ore_inventory={}, ore_kg_data={}, bag_kg_used=0.0)
+    await add_balance(callback.from_user.id, total_coins, f"Jual semua bag ({total_items} ore, {format_kg(total_weight)})")
 
     user = await get_user(callback.from_user.id)
     await callback.message.edit_text(
         f"💰 *Semua Ore Terjual!*\n\n"
         f"📦 Total ore   : `{total_items}` buah\n"
+        f"⚖️ Total berat : `{format_kg(total_weight)}`\n"
         f"🪨 Total jenis : `{len(ore_inv)}`\n"
         f"💰 Koin dapat  : `+{total_coins:,}`\n"
         f"💰 Saldo baru  : `{user['balance']:,}` koin",
@@ -293,9 +361,6 @@ async def cb_bag_sell_everything(callback: CallbackQuery):
     await callback.answer(f"✅ +{total_coins:,} koin!", show_alert=True)
 
 
-# ══════════════════════════════════════════════════════════════
-# /buyslot — Tambah slot bag
-# ══════════════════════════════════════════════════════════════
 @router.message(Command("buyslot"))
 async def cmd_buyslot(message: Message):
     is_admin = _is_admin(message.from_user.id)
@@ -303,7 +368,14 @@ async def cmd_buyslot(message: Message):
     await message.answer(msg, parse_mode="Markdown")
 
 
-# Info harga slot
+@router.message(Command("buykg"))
+async def cmd_buykg(message: Message):
+    """Upgrade kapasitas KG bag."""
+    is_admin = _is_admin(message.from_user.id)
+    ok, msg = await buy_bag_kg(message.from_user.id, admin=is_admin)
+    await message.answer(msg, parse_mode="Markdown")
+
+
 @router.message(Command("slotinfo"))
 async def cmd_slotinfo(message: Message):
     user = await get_user(message.from_user.id)
@@ -312,31 +384,27 @@ async def cmd_slotinfo(message: Message):
         return
 
     cur_slots   = user.get("bag_slots", BAG_SLOT_DEFAULT)
+    cur_kg      = user.get("bag_kg_max", 100.0)
+    kg_used     = user.get("bag_kg_used", 0.0)
     steps_done  = (cur_slots - BAG_SLOT_DEFAULT) // BAG_SLOT_STEP
     next_price  = BAG_SLOT_BASE_COST + (steps_done * 500)
     ore_used    = sum(user.get("ore_inventory", {}).values())
 
     lines = [
-        f"🎒 *Info Slot Bag*",
+        f"🎒 *Info Bag*",
         f"━━━━━━━━━━━━━━━━━━━━",
-        f"📦 Slot saat ini : `{cur_slots}`",
-        f"📦 Slot terpakai : `{ore_used}/{cur_slots}`",
-        f"📦 Slot maksimal : `{BAG_SLOT_MAX}`",
+        f"📦 Slot     : `{ore_used}/{cur_slots}`",
+        f"⚖️ Berat    : `{format_kg(kg_used)}/{format_kg(cur_kg)}`",
         f"",
-        f"💰 Harga upgrade berikutnya: `{next_price:,}` koin",
-        f"   _(+{BAG_SLOT_STEP} slot per upgrade)_",
+        f"💰 Upgrade slot: `{next_price:,}` koin (+{BAG_SLOT_STEP} slot)",
+        f"   Ketik `/buyslot` untuk upgrade",
         f"",
-        f"Ketik `/buyslot` untuk upgrade!",
+        f"💰 Upgrade KG: `{BAG_KG_UPGRADE_COST:,}` koin (+{format_kg(BAG_KG_UPGRADE_STEP)})",
+        f"   Ketik `/buykg` untuk upgrade",
     ]
-    if cur_slots >= BAG_SLOT_MAX:
-        lines.append(f"\n✅ *Slot sudah maksimal ({BAG_SLOT_MAX})!*")
-
     await message.answer("\n".join(lines), parse_mode="Markdown")
 
 
-# ══════════════════════════════════════════════════════════════
-# /buyenergy — Tambah max energy
-# ══════════════════════════════════════════════════════════════
 @router.message(Command("buyenergy"))
 async def cmd_buyenergy(message: Message):
     is_admin = _is_admin(message.from_user.id)
@@ -344,7 +412,6 @@ async def cmd_buyenergy(message: Message):
     await message.answer(msg, parse_mode="Markdown")
 
 
-# Info harga energy
 @router.message(Command("energyinfo"))
 async def cmd_energyinfo(message: Message):
     user = await get_user(message.from_user.id)
