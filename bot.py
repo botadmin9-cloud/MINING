@@ -1,3 +1,6 @@
+"""
+🤖 Mining Bot v3 — Main Entry Point
+"""
 import asyncio
 import logging
 
@@ -50,6 +53,8 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="admin_giveitem",        description="🎁 Beri item ke user"),
     BotCommand(command="admin_givezone",        description="🌍 Buka zona untuk user"),
     BotCommand(command="admin_reset",           description="🔄 Reset data user"),
+    BotCommand(command="admin_setphoto",        description="📸 Upload foto admin"),
+    BotCommand(command="admin_myphotos",        description="📸 Lihat foto admin"),
     BotCommand(command="admin_setorephoto",     description="📸 Pasang foto ore"),
     BotCommand(command="admin_listorephoto",    description="📸 Daftar foto ore"),
     BotCommand(command="admin_delorephoto",     description="📸 Hapus foto ore"),
