@@ -1,3 +1,6 @@
+"""
+⛏️ Mining Handler v2 — Fixed x5/x10, cooldown, speed system
+"""
 import asyncio
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -8,6 +11,7 @@ from database import get_user
 from game import (perform_mine, build_mine_result_text, regen_energy,
                    energy_full_in, equip_tool, set_zone,
                    get_mine_cooldown_seconds, check_mine_cooldown)
+from config import format_kg, xp_for_level
 from keyboards import mine_action_kb, equip_menu_kb, zone_menu_kb, main_menu_kb
 
 router = Router()
@@ -33,7 +37,7 @@ async def _mine_panel(user_id: int) -> str:
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🔧 *Alat Aktif:*\n"
         f"   {tool['emoji']} *{tool['name']}* (Tier {tool['tier']} — {tool['tier_name']})\n"
-        f"   ├ ⚡ Power    : `+{tool['power']}` koin base\n"
+        f"   ├ ⚡ Power    : `+{tool['power']}` (base)\n"
         f"   ├ 🚀 Speed    : `{tool['speed_mult']}x`\n"
         f"   ├ ⏱️ Cooldown : `{cooldown}` detik\n"
         f"   ├ 💥 Crit     : `{int(tool['crit_bonus']*100)}%` bonus\n"
@@ -92,8 +96,8 @@ async def cb_do_mine_5(callback: CallbackQuery):
     is_admin = _is_admin(uid)
     await callback.answer("⛏️ Mining 5x...")
 
-    total_coins = 0
     total_xp    = 0
+    total_kg    = 0.0
     ores_found  = {}
     specials    = []
     crits = luckies = level_ups = 0
@@ -115,7 +119,6 @@ async def cb_do_mine_5(callback: CallbackQuery):
         if not r["ok"]:
             last_error = r["msg"]
             break
-        total_coins += r["coins"]
         total_xp    += r["xp_gain"]
         ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
         ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
@@ -180,7 +183,6 @@ async def cb_do_mine_10(callback: CallbackQuery):
         if not r["ok"]:
             last_error = r["msg"]
             break
-        total_coins += r["coins"]
         total_xp    += r["xp_gain"]
         ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
         ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
