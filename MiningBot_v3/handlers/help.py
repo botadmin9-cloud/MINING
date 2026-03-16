@@ -1,61 +1,70 @@
+"""
+❓ Help Handler v4
+"""
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
-from keyboards import back_main_kb
-from config import ENERGY_COOLDOWN_MINUTES, MAX_LEVEL, BAG_SLOT_DEFAULT, BAG_SLOT_MAX, ENERGY_UPGRADE_MAX
+from keyboards import main_menu_kb
 
 router = Router()
+
+HELP_TEXT = """
+❓ *BANTUAN — MiningBot v4 ULTIMATE*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎮 *CARA BERMAIN:*
+1️⃣ Mining ore → masuk ke Bag
+2️⃣ Jual ore di Bag atau Market
+3️⃣ Gunakan koin untuk beli alat & item
+4️⃣ Level up untuk buka konten baru!
+
+⚖️ *SISTEM KG:*
+• Setiap ore punya berat (kg_min — kg_max)
+• Ore lebih berat = harga jual lebih tinggi
+• Harga jual = nilai_dasar × berat_kg × 1.5
+• Alat lebih canggih = ore lebih berat!
+• Gunakan ⚖️ Weight Enhancer untuk boost KG
+
+⭐ *SISTEM XP:*
+• Mining fokus memberikan XP (bukan koin)
+• Koin didapat dari MENJUAL ore di Bag/Market
+• Ore lebih berat = XP lebih banyak
+• Critical hit = XP 2x + ore lebih berat
+• Lucky = XP 1.5x + ore sedikit lebih berat
+
+⚡ *PERINTAH UTAMA:*
+/mine — Buka panel mining
+/bag — Lihat & jual ore
+/shop — Beli alat, item, zona baru
+/inventory — Pakai item consumable
+/profile — Lihat statistik kamu
+/daily — Ambil bonus harian
+/market — Jual beli ore antar pemain
+/leaderboard — Papan peringkat
+
+🎒 *UPGRADE BAG:*
+/buyslot — +10 slot bag
+/buykg — +50 kg kapasitas bag
+/slotinfo — Info harga upgrade bag
+
+⚡ *UPGRADE ENERGY:*
+/buyenergy — +100 max energy
+/energyinfo — Info harga upgrade energy
+
+💡 *TIPS:*
+• Gunakan zona lebih dalam = ore lebih langka
+• Daily streak memberikan bonus berlipat
+• Premium Mystery Box bisa dapat ore legendaris
+• Rebirth Token reset level tapi +50% XP permanent
+• Alat Tier 8 Divine menghasilkan XP 50x!
+
+🌍 *ZONA:* 12 zona dari Permukaan hingga Alam Genesis
+⛏️ *ALAT:* 25 alat dari Tier 1 Starter hingga Tier 8 Divine
+🪨 *ORE:* 38 jenis ore dari Kerikil hingga Inti Semesta
+🎒 *ITEM:* 18 item termasuk KG Boost baru!
+"""
 
 @router.message(F.text == "❓ Bantuan")
 @router.message(Command("help"))
 async def show_help(message: Message):
-    text = (
-        "❓ *Panduan Mining Bot v3*\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
-        "⛏️ *CARA MINING:*\n"
-        "• Tekan *⛏️ Mining* → Mine!, x5, atau x10\n"
-        "• Tiap mine pakai ⚡ Energy\n"
-        f"• Energy regen 1 per {ENERGY_COOLDOWN_MINUTES} menit\n"
-        "• Cooldown antar mine tergantung alat (murah=lama, mahal=cepat)\n\n"
-
-        "🎒 *BAG (Kantong Ore):*\n"
-        f"• Default: `{BAG_SLOT_DEFAULT}` slot, maks `{BAG_SLOT_MAX}` slot\n"
-        "• Ketik `/bag` untuk lihat semua ore kamu\n"
-        "• Tombol *Jual 1* / *Jual Semua* / *Jual SEMUA Ore* tersedia\n"
-        "• Klik nama ore untuk detail + foto (jika ada)\n\n"
-
-        "⚡ *UPGRADE ENERGY & SLOT:*\n"
-        f"• `/buyenergy` — Tambah max energy (+100, maks {ENERGY_UPGRADE_MAX})\n"
-        "• `/energyinfo` — Cek harga upgrade energy\n"
-        f"• `/buyslot` — Tambah slot bag (+10, maks {BAG_SLOT_MAX})\n"
-        "• `/slotinfo` — Cek harga upgrade slot\n"
-        "• Harga naik setiap kali upgrade!\n\n"
-
-        "⭐ *FAVORIT (maks 150):*\n"
-        "• Tandai ore favorit via `/bag` → detail ore\n"
-        "• Lihat semua favorit: *⭐ Favorit* atau `/fav`\n\n"
-
-        "🏛️ *MUSEUM (maks 30):*\n"
-        "• Simpan ore langka sebagai koleksi di museum\n"
-        "• Lihat foto ore langka yang dipasang admin\n"
-        "• Buka via *🏛️ Museum* atau `/museum`\n\n"
-
-        "🛒 *MARKET ORE:*\n"
-        "• Jual ore ke pemain lain, harga bebas\n"
-        "• Fee 5% dari total harga jual\n"
-        "• Notifikasi beserta ID Telegram ke kedua pihak\n\n"
-
-        "🔄 *REBIRTH:*\n"
-        f"• Hanya di Level {MAX_LEVEL} (level maks)\n"
-        "• Reset level → 1, dapat +50% permanent coin\n"
-        "• Beli *Rebirth Token* di Shop\n\n"
-
-        "🏅 *PRESTASI:*\n"
-        "20+ prestasi! Cek di *👤 Profil → Prestasi*\n\n"
-
-        "📋 *PERINTAH CEPAT:*\n"
-        "`/bag` `/buyenergy` `/buyslot`\n"
-        "`/favorite` `/museum` `/shop` `/daily`"
-    )
-    await message.answer(text, reply_markup=back_main_kb(), parse_mode="Markdown")
+    await message.answer(HELP_TEXT, parse_mode="Markdown", reply_markup=main_menu_kb())
