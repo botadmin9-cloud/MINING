@@ -1,6 +1,3 @@
-"""
-⛏️ Mining Handler v2 — Fixed x5/x10, cooldown, speed system
-"""
 import asyncio
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -120,6 +117,7 @@ async def cb_do_mine_5(callback: CallbackQuery):
             last_error = r["msg"]
             break
         total_xp    += r["xp_gain"]
+        total_kg    += r.get("ore_kg", 0.0)
         ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
         ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
         if r["is_crit"]:   crits += 1
@@ -139,13 +137,14 @@ async def cb_do_mine_5(callback: CallbackQuery):
     ach_txt = "".join(f"\n🏅 Prestasi: *{a['name']}*" for a in new_ach)
     err_txt = f"\n\n⚠️ {last_error}" if last_error else ""
 
+    from config import format_kg as _fkg
     user = await get_user(uid)
     text = (
         f"⛏️ *Mining x5 Selesai!*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🪨 *Bijih Ditemukan:*\n{ore_lines}\n\n"
-        f"💰 Total Koin : `+{total_coins:,}`\n"
         f"⭐ Total XP   : `+{total_xp:,}`\n"
+        f"⚖️ Total KG   : `{_fkg(total_kg)}`\n"
         f"💥 Critical   : {crits}x\n"
         f"🍀 Lucky      : {luckies}x"
         f"{special_txt}{lvl_txt}{ach_txt}{err_txt}\n\n"
@@ -161,8 +160,9 @@ async def cb_do_mine_10(callback: CallbackQuery):
     is_admin = _is_admin(uid)
     await callback.answer("⛏️ Mining 10x...")
 
-    total_coins = 0
+    total_coins = 0  # kept for compat
     total_xp    = 0
+    total_kg    = 0.0
     ores_found  = {}
     specials    = []
     crits = luckies = lvl_ups = 0
@@ -184,6 +184,7 @@ async def cb_do_mine_10(callback: CallbackQuery):
             last_error = r["msg"]
             break
         total_xp    += r["xp_gain"]
+        total_kg    += r.get("ore_kg", 0.0)
         ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
         ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
         if r["is_crit"]:  crits += 1
@@ -199,13 +200,14 @@ async def cb_do_mine_10(callback: CallbackQuery):
     ore_lines = "\n".join(f"   {k}: x{v}" for k, v in ores_found.items()) or "   Tidak ada"
     err_txt = f"\n\n⚠️ {last_error}" if last_error else ""
 
+    from config import format_kg as _fkg
     user = await get_user(uid)
     text = (
         f"⛏️ *Mining x10 Selesai!*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🪨 *Bijih Ditemukan:*\n{ore_lines}\n\n"
-        f"💰 Total Koin : `+{total_coins:,}`\n"
         f"⭐ Total XP   : `+{total_xp:,}`\n"
+        f"⚖️ Total KG   : `{_fkg(total_kg)}`\n"
         f"💥 Critical   : {crits}x\n"
         f"🍀 Lucky      : {luckies}x"
         + (f"\n🌟 Special: {', '.join(set(specials))}" if specials else "")
