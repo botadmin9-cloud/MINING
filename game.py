@@ -306,6 +306,49 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         special_hit = "🧬 Nano Swarm! 4x XP!"
     elif tool_id == "photon_extractor" and random.random() < 0.10:
         special_hit = "💡 Light Speed! Energy gratis!"
+    elif tool_id == "tachyon_drill" and random.random() < 0.12:
+        xp_gain *= 4
+        ore_kg = round(ore_kg * 1.5, 2)
+        special_hit = "🌀 Tachyon! 4x XP & KG 1.5x!"
+    elif tool_id == "psionic_drill" and random.random() < 0.12:
+        xp_gain *= 4
+        special_hit = "🧠 Psionic! 4x XP!"
+    elif tool_id == "entropy_drill" and random.random() < 0.18:
+        xp_gain *= 3
+        ore_kg = round(ore_kg * 2.0, 2)
+        special_hit = "🌪️ Entropy! 3x XP & KG 2x!"
+    elif tool_id == "wormhole_drill" and random.random() < 0.20:
+        xp_gain *= 4
+        await add_ore_to_inventory(user_id, ore_id, 1, ore_kg)
+        special_hit = "🌐 Wormhole! 4x XP + ore bonus!"
+    elif tool_id == "star_forge" and random.random() < 0.25:
+        xp_gain *= 6
+        ore_kg = round(ore_kg * 2.0, 2)
+        special_hit = "⭐ Star Forge! 6x XP & KG 2x!"
+    elif tool_id == "eternal_pick" and random.random() < 0.30:
+        xp_gain *= 8
+        ore_kg = round(ore_kg * 3.0, 2)
+        special_hit = "♾️ Eternal! 8x XP & KG 3x!"
+    elif tool_id == "omega_drill" and random.random() < 0.38:
+        xp_gain *= 10
+        ore_kg = round(ore_kg * 2.5, 2)
+        special_hit = "🔱 Omega! 10x XP & KG 2.5x!"
+    elif tool_id == "cosmos_hammer" and random.random() < 0.45:
+        xp_gain *= 15
+        ore_kg = round(ore_kg * 5.0, 2)
+        special_hit = "🌌 Cosmos! 15x XP & KG 5x!"
+    elif tool_id == "neutron_drill" and random.random() < 0.10:
+        xp_gain = int(xp_gain * 3.5)
+        special_hit = "⚛️ Neutron Burst! 3.5x XP!"
+    elif tool_id == "magma_drill" and random.random() < 0.08:
+        xp_gain = int(xp_gain * 2.5)
+        special_hit = "🌋 Magma Burst! 2.5x XP!"
+    elif tool_id == "cobalt_drill" and random.random() < 0.10:
+        ore_kg = round(ore_kg * 1.5, 2)
+        special_hit = "🔵 Cobalt! KG 1.5x!"
+    elif tool_id == "meteor_hammer" and random.random() < 0.12:
+        xp_gain = int(xp_gain * 3)
+        special_hit = "☄️ Meteor! 3x XP!"
 
     # ── Apply changes ─────────────────────────────────────────
     new_energy = user["energy"] - (0 if is_admin else energy_cost)
@@ -510,10 +553,12 @@ async def check_achievements(user_id: int) -> list:
     if lv >= 200:  await grant("lvl_200")
     if lv >= 500:  await grant("lvl_500")
 
-    # KG achievements
-    if total_kg >= 1000:    await grant("heavy_miner")
-    if total_kg >= 10000:   await grant("super_heavy")
-    if total_kg >= 100000:  await grant("kg_master")
+    # KG achievements (tons: 1 ton = 1000 kg)
+    if total_kg >= 1000:       await grant("heavy_miner")
+    if total_kg >= 10000:      await grant("super_heavy")
+    if total_kg >= 100000:     await grant("kg_master")
+    if total_kg >= 1000000:    await grant("ton_miner")     # 1000 ton
+    if total_kg >= 30000000:   await grant("mega_ton")      # 30000 ton
 
     # Ore achievements
     ore_inv = user.get("ore_inventory", {})
@@ -523,6 +568,42 @@ async def check_achievements(user_id: int) -> list:
         await grant("cosmic_find")
     if ore_inv.get("eternity_stone", 0) > 0:
         await grant("divine_find")
+
+    # Mythical / Cosmic / Divine first find
+    mythical_ores = {"dragonstone","stardust","phoenix_ash","lunar_crystal","void_shard","dragon_heart","leviathan_scale","thunder_stone","glacial_shard","cursed_gem"}
+    cosmic_ores = {"cosmic_dust","nebula_ore","time_crystal","dark_energy_ore","pulsar_fragment","quasar_crystal","antimatter_shard","neutron_core","singularity_ore","gamma_crystal"}
+    divine_ores = {"soul_fragment","eternity_stone","universe_core","god_tear","creation_spark","omega_shard","infinity_gem"}
+    if any(ore_inv.get(o, 0) > 0 for o in mythical_ores):
+        await grant("first_mythical")
+    if any(ore_inv.get(o, 0) > 0 for o in cosmic_ores):
+        await grant("first_cosmic")
+    if any(ore_inv.get(o, 0) > 0 for o in divine_ores):
+        await grant("first_divine")
+    if ore_inv.get("neutron_core", 0) > 0:
+        await grant("neutron_miner")
+    if ore_inv.get("infinity_gem", 0) > 0:
+        await grant("infinity_hunter")
+
+    # Legendary first find
+    legendary_ores = {"diamond","amethyst","opal","mythril","alexandrite","painite","benitoite","jadeite","larimar","musgravite"}
+    if any(ore_inv.get(o, 0) > 0 for o in legendary_ores):
+        await grant("legendary_find")
+
+    # Collector achievements
+    unique_ores = sum(1 for v in ore_inv.values() if v > 0)
+    if unique_ores >= 10:  await grant("collector_10")
+    if unique_ores >= 25:  await grant("collector_25")
+
+    # Tool master
+    owned_tools = user.get("owned_tools", [])
+    if len(owned_tools) >= 10:
+        await grant("tool_master")
+
+    # All zones
+    all_zone_ids = set(["surface","cave","mine_shaft","underground","volcanic_field","lava_cave","deep_mine","crystal_cavern","gem_paradise","ancient_ruins","dragon_lair","void_realm","sky_island","frozen_core","deep_space","pulsar_belt","time_rift","antimatter_zone","soul_realm","genesis_realm"])
+    unlocked_zones = set(user.get("unlocked_zones", []))
+    if all_zone_ids.issubset(unlocked_zones):
+        await grant("all_zones")
 
     if new_ones:
         await update_user(user_id, achievements=achieved)
@@ -669,7 +750,22 @@ async def use_item(user_id: int, item_id: str) -> Tuple[bool, str]:
         msg_lines.append(f"🎒 Slot bag: `{cur_slots} → {new_slots}`")
         msg_lines.append(f"⚖️ Kapasitas KG: `{format_kg(cur_kg)} → {format_kg(new_kg)}`")
 
-    elif "kg_boost" in effect or "luck_buff" in effect or "xp_mult" in effect or "speed_boost" in effect or "coin_mult" in effect:
+    elif "mega_bag_expand" in effect:
+        cur_slots = user.get("bag_slots", 50)
+        cur_kg = user.get("bag_kg_max", 100.0)
+        from config import BAG_SLOT_MAX, BAG_KG_MAX
+        new_slots = min(cur_slots + 15, BAG_SLOT_MAX)
+        new_kg = min(cur_kg + 50.0, BAG_KG_MAX)
+        updates["bag_slots"] = new_slots
+        updates["bag_kg_max"] = new_kg
+        msg_lines.append(f"🎒 Slot bag: `{cur_slots} → {new_slots}` (+15)")
+        msg_lines.append(f"⚖️ Kapasitas KG: `{format_kg(cur_kg)} → {format_kg(new_kg)}` (+50kg)")
+
+    elif "mystery_divine" in effect:
+        reward = _mystery_box_reward(premium=True, divine=True)
+        msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
+
+    elif any(k in effect for k in ("kg_boost","luck_buff","xp_mult","speed_boost","coin_mult")):
         buffs = get_active_buffs(user)
         now = datetime.now()
         dur = effect.get("duration", 20)
@@ -734,7 +830,21 @@ async def _apply_mystery_reward(user_id: int, user: dict, reward: dict) -> list:
     return lines
 
 
-def _mystery_box_reward(premium: bool = False) -> dict:
+def _mystery_box_reward(premium: bool = False, divine: bool = False) -> dict:
+    if divine:
+        roll = random.random()
+        mythical_ores = ["dragonstone","stardust","phoenix_ash","lunar_crystal","void_shard","dragon_heart","leviathan_scale","thunder_stone","glacial_shard","cursed_gem"]
+        cosmic_ores = ["cosmic_dust","nebula_ore","time_crystal","dark_energy_ore","pulsar_fragment","quasar_crystal","antimatter_shard","neutron_core","singularity_ore","gamma_crystal"]
+        divine_ores = ["soul_fragment","eternity_stone","universe_core","god_tear","creation_spark","omega_shard","infinity_gem"]
+        if roll < 0.50:
+            return {"type": "ore", "ore_id": random.choice(mythical_ores)}
+        elif roll < 0.80:
+            return {"type": "ore", "ore_id": random.choice(cosmic_ores)}
+        elif roll < 0.95:
+            return {"type": "ore", "ore_id": random.choice(divine_ores)}
+        else:
+            amount = random.randint(100000, 1000000)
+            return {"type": "xp", "amount": amount}
     if premium:
         roll = random.random()
         if roll < 0.40:
