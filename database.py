@@ -1,3 +1,7 @@
+"""
+🗄️ Database Module — SQLite via aiosqlite
+   Semua operasi database ada di sini (versi v2 dengan market & foto admin)
+"""
 import aiosqlite
 import json
 import logging
@@ -44,6 +48,11 @@ async def init_db():
             last_energy_regen TEXT  DEFAULT NULL,
             last_mine_time  TEXT    DEFAULT NULL,
             last_auto_mine  TEXT    DEFAULT NULL,
+            bag_kg_used     REAL    DEFAULT 0.0,
+            bag_kg_max      REAL    DEFAULT 100.0,
+            total_kg_mined  REAL    DEFAULT 0.0,
+            perm_xp_mult    REAL    DEFAULT 1.0,
+            ore_kg_data     TEXT    DEFAULT '{}',
             created_at      TEXT    DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -120,6 +129,11 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN bag_slots INTEGER DEFAULT 50",
             "ALTER TABLE users ADD COLUMN favorite_ores TEXT DEFAULT '[]'",
             "ALTER TABLE users ADD COLUMN museum_ores TEXT DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN bag_kg_used REAL DEFAULT 0.0",
+            "ALTER TABLE users ADD COLUMN bag_kg_max REAL DEFAULT 100.0",
+            "ALTER TABLE users ADD COLUMN total_kg_mined REAL DEFAULT 0.0",
+            "ALTER TABLE users ADD COLUMN perm_xp_mult REAL DEFAULT 1.0",
+            "ALTER TABLE users ADD COLUMN ore_kg_data TEXT DEFAULT '{}'",
         ]:
             try:
                 await db.execute(col_sql)
@@ -149,8 +163,17 @@ def _row_to_user(row) -> dict:
     d["ore_inventory"]  = _loads(d.get("ore_inventory"),  {})
     d["favorite_ores"]  = _loads(d.get("favorite_ores"),  [])
     d["museum_ores"]    = _loads(d.get("museum_ores"),     [])
+    d["ore_kg_data"]    = _loads(d.get("ore_kg_data"),     {})
     if "bag_slots" not in d or d["bag_slots"] is None:
         d["bag_slots"] = 50
+    if "bag_kg_max" not in d or d["bag_kg_max"] is None:
+        d["bag_kg_max"] = 100.0
+    if "bag_kg_used" not in d or d["bag_kg_used"] is None:
+        d["bag_kg_used"] = 0.0
+    if "total_kg_mined" not in d or d["total_kg_mined"] is None:
+        d["total_kg_mined"] = 0.0
+    if "perm_xp_mult" not in d or d["perm_xp_mult"] is None:
+        d["perm_xp_mult"] = 1.0
     return d
 
 
@@ -183,7 +206,7 @@ async def update_user(user_id: int, **kwargs):
         return
     for key in ("owned_tools", "unlocked_zones", "inventory",
                 "active_buffs", "achievements", "ore_inventory",
-                "favorite_ores", "museum_ores"):
+                "favorite_ores", "museum_ores", "ore_kg_data"):
         if key in kwargs:
             kwargs[key] = json.dumps(kwargs[key], ensure_ascii=False)
     cols = ", ".join(f"{k}=?" for k in kwargs)
@@ -207,14 +230,18 @@ async def add_balance(user_id: int, amount: int, desc: str = ""):
         await db.commit()
 
 
-async def add_ore_to_inventory(user_id: int, ore_id: str, qty: int = 1):
-    """Tambah ore ke ore_inventory user."""
+async def add_ore_to_inventory(user_id: int, ore_id: str, qty: int = 1, kg: float = 0.0):
+    """Tambah ore ke ore_inventory user. kg = berat ore yang ditambahkan."""
     user = await get_user(user_id)
     if not user:
         return
     ore_inv = user.get("ore_inventory", {})
     ore_inv[ore_id] = ore_inv.get(ore_id, 0) + qty
-    await update_user(user_id, ore_inventory=ore_inv)
+    # Simpan data KG per ore type (akumulatif total kg)
+    ore_kg_data = user.get("ore_kg_data", {})
+    if kg > 0:
+        ore_kg_data[ore_id] = round(ore_kg_data.get(ore_id, 0.0) + kg, 2)
+    await update_user(user_id, ore_inventory=ore_inv, ore_kg_data=ore_kg_data)
 
 
 async def remove_ore_from_inventory(user_id: int, ore_id: str, qty: int) -> bool:
