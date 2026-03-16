@@ -1,6 +1,3 @@
-"""
-⌨️ Keyboards v2 — Semua tombol inline & reply keyboard
-"""
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton
