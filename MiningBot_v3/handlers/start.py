@@ -1,3 +1,6 @@
+"""
+🏠 Start Handler v3 — Tanpa referral, menu lengkap, blokir cek profil admin
+"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
