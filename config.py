@@ -1,11 +1,3 @@
-"""
-⚙️ CONFIG — MiningBot v4 ULTIMATE EDITION (PATCHED + EXPANDED)
-   ✅ Bug fix: total_coins pada mining x5/x10 diperbaiki
-   ✅ Bug fix: format_kg mendukung ton & miligram  
-   ✅ Bug fix: missing total_kg di mining x5
-   ✅ BAG_KG_MAX dinaikkan ke 30 ton (30000 kg)
-   ✅ 70+ Ore, 40+ Alat, 40+ Item, 20 Zona
-"""
 import os
 import random
 from dotenv import load_dotenv
