@@ -1,11 +1,3 @@
-"""
-🎒 Bag Handler v4 ULTIMATE
-— /bag          : lihat ore inventory dengan info KG
-— /buyslot      : beli tambahan slot bag
-— /buykg        : upgrade kapasitas KG bag
-— /buyenergy    : beli tambahan max energy
-— Harga jual ore BERBASIS KG (ore lebih berat = lebih mahal)
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
