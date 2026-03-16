@@ -1,10 +1,13 @@
+"""
+🛒 Market Handler v2 — Jual beli ore antar pemain
+"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT
+from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT, calculate_sell_price, format_kg
 from database import (get_user, get_market_listings, get_listing_by_id,
                        buy_market_listing, cancel_market_listing,
                        get_user_market_listings, create_market_listing,
@@ -247,10 +250,16 @@ async def process_sell_qty(message: Message, state: FSMContext):
     await state.set_state(SellOreState.waiting_price)
 
     ore = ORES.get(data["ore_id"], {})
-    suggest = ore.get("value", 1) * qty
+    # Harga berdasarkan KG
+    kg_min = ore.get("kg_min", 0.5)
+    kg_max = ore.get("kg_max", 2.0)
+    kg_avg = (kg_min + kg_max) / 2
+    suggest_per = calculate_sell_price(data["ore_id"], kg_avg)
+    suggest = suggest_per * qty
     await message.answer(
         f"💰 Jual *{qty}x {data['ore_emoji']} {data['ore_name']}*\n\n"
-        f"💡 Harga pasar: `{ore.get('value', 1):,}` koin/buah\n"
+        f"⚖️ Berat rata-rata: `{format_kg(kg_avg)}` /buah\n"
+        f"💡 Harga per buah (est.): `{suggest_per:,}` koin\n"
         f"💡 Harga total disarankan: `{suggest:,}` koin\n\n"
         f"Ketik *total harga jual* dalam koin:",
         parse_mode="Markdown"
