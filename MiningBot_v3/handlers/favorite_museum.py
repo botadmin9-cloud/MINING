@@ -1,3 +1,9 @@
+"""
+⭐ Favorite & 🏛️ Museum Handler v3
+— Favorite : tandai ore favorit, maks 150 jenis
+— Museum   : simpan ore langka sebagai pajangan, maks 30 jenis
+— Toggle via bag detail atau command langsung
+"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
