@@ -1,3 +1,6 @@
+"""
+👤 Profile Handler v3 — Telegram ID, Bag info, blokir lihat profil admin
+"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
