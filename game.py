@@ -1,11 +1,3 @@
-"""
-🎮 Game Engine v4 ULTIMATE — Mining logic, KG system, XP focus, buffs, leveling, achievements
-   ✅ Mining memberikan XP (bukan koin langsung)
-   ✅ Setiap ore punya berat KG (kg_min - kg_max)
-   ✅ Harga jual ore = value * kg * 1.5
-   ✅ Item KG Boost tersedia
-   ✅ Semua bug diperbaiki
-"""
 import random
 import logging
 from datetime import datetime, timedelta
