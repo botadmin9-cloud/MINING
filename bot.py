@@ -33,8 +33,6 @@ PLAYER_COMMANDS = [
     BotCommand(command="museum",      description="🏛️ Museum ore langka"),
     BotCommand(command="buyenergy",   description="⚡ Beli tambahan max energy"),
     BotCommand(command="buyslot",     description="🎒 Beli tambahan slot bag"),
-    BotCommand(command="energyinfo",  description="⚡ Info harga upgrade energy"),
-    BotCommand(command="slotinfo",    description="🎒 Info harga upgrade slot"),
     BotCommand(command="help",        description="❓ Panduan bermain"),
 ]
 
