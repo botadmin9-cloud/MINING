@@ -17,12 +17,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Perintah untuk semua pemain ──────────────────────────────
 PLAYER_COMMANDS = [
     BotCommand(command="start",       description="🏠 Menu utama"),
     BotCommand(command="mine",        description="⛏️ Mining"),
     BotCommand(command="bag",         description="🎒 Lihat & kelola ore"),
     BotCommand(command="profile",     description="👤 Profil kamu"),
+    BotCommand(command="setname",     description="✏️ Ganti nama game"),
     BotCommand(command="shop",        description="🏪 Toko alat & item"),
     BotCommand(command="inventory",   description="🎁 Inventaris item"),
     BotCommand(command="equipment",   description="🔧 Peralatan"),
@@ -33,10 +33,11 @@ PLAYER_COMMANDS = [
     BotCommand(command="museum",      description="🏛️ Museum ore langka"),
     BotCommand(command="buyenergy",   description="⚡ Beli tambahan max energy"),
     BotCommand(command="buyslot",     description="🎒 Beli tambahan slot bag"),
+    BotCommand(command="energyinfo",  description="⚡ Info harga upgrade energy"),
+    BotCommand(command="slotinfo",    description="🎒 Info harga upgrade slot"),
     BotCommand(command="help",        description="❓ Panduan bermain"),
 ]
 
-# ── Perintah tambahan untuk admin (ditambahkan di atas player commands) ──
 ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="adminhelp",             description="🔐 Panel admin"),
     BotCommand(command="admin_stats",           description="📊 Statistik bot"),
@@ -48,6 +49,7 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="admin_setenergy",       description="⚡ Set energy user"),
     BotCommand(command="admin_givetool",        description="🔧 Beri alat ke user"),
     BotCommand(command="admin_giveitem",        description="🎁 Beri item ke user"),
+    BotCommand(command="admin_giveore",         description="🪨 Beri ore ke user"),
     BotCommand(command="admin_givezone",        description="🌍 Buka zona untuk user"),
     BotCommand(command="admin_reset",           description="🔄 Reset data user"),
     BotCommand(command="admin_setphoto",        description="📸 Upload foto admin"),
@@ -59,14 +61,12 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="admin_items",           description="🎒 Daftar item_id"),
     BotCommand(command="admin_zones",           description="🌍 Daftar zone_id"),
     BotCommand(command="admin_ores",            description="🪨 Daftar ore_id"),
+    BotCommand(command="admin_deletephoto",     description="📸 Hapus foto admin"),
 ]
 
 
 async def set_bot_commands(bot: Bot):
-    """Set perintah bot — pemain hanya lihat player commands, admin lihat semua."""
-    # Set untuk semua user (default)
     await bot.set_my_commands(PLAYER_COMMANDS, scope=BotCommandScopeDefault())
-    # Set khusus untuk setiap admin (tampilkan semua perintah)
     for admin_id in ADMIN_IDS:
         try:
             await bot.set_my_commands(
@@ -79,9 +79,10 @@ async def set_bot_commands(bot: Bot):
 
 async def main():
     await init_db()
-    logger.info("✅ Database initialized (v3)")
+    logger.info("✅ Database initialized (v5 FIXED)")
 
     bot = Bot(token=BOT_TOKEN)
+    # ✅ MemoryStorage diperlukan untuk FSM (registrasi username & setname)
     dp  = Dispatcher(storage=MemoryStorage())
 
     # Register semua router
@@ -99,11 +100,10 @@ async def main():
     dp.include_router(bag.router)
     dp.include_router(favorite_museum.router)
 
-    # Set bot commands di Telegram
     await set_bot_commands(bot)
     logger.info("✅ Bot commands set")
 
-    logger.info("🤖 Mining Bot v3 starting...")
+    logger.info("🤖 Mining Bot v5 FIXED starting...")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
