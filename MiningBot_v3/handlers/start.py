@@ -1,13 +1,19 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 from config import TOOLS, ZONES, ADMIN_IDS
-from database import get_user, create_user
+from database import get_user, create_user, update_user
 from game import regen_energy, energy_full_in, get_active_buffs
 from keyboards import main_menu_kb
 
 router = Router()
+
+
+class RegisterState(StatesGroup):
+    waiting_username = State()
 
 
 def _is_admin(uid: int) -> bool:
@@ -15,32 +21,24 @@ def _is_admin(uid: int) -> bool:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
     uid = message.from_user.id
     uname = message.from_user.username or ""
     fname = message.from_user.first_name or "Miner"
 
     existing = await get_user(uid)
     if not existing:
-        await create_user(uid, uname, fname)
-        admin_note = "\n👑 Kamu adalah *Admin Bot* ini!" if _is_admin(uid) else ""
-        text = (
-            f"⛏️ *Selamat Datang di Mining Bot v3, {fname}!*\n\n"
-            f"🎮 Kamu telah bergabung sebagai penambang!\n"
-            f"💰 Saldo awal       : *500 koin*\n"
-            f"⛏️ Alat starter     : *Beliung Batu* (Gratis)\n"
-            f"📍 Zona awal        : *Permukaan*\n"
-            f"⚡ Max Energy       : *500*\n"
-            f"🎒 Slot Bag         : *50 slot*\n\n"
-            f"🆔 Telegram ID: `{uid}`\n\n"
-            f"📋 *Perintah Berguna:*\n"
-            f"• `/bag` — Lihat & kelola ore\n"
-            f"• `/buyenergy` — Tambah max energy\n"
-            f"• `/buyslot` — Tambah slot bag\n"
-            f"• `/favorite` — Ore favorit\n"
-            f"• `/museum` — Museum ore langka\n\n"
-            f"🚀 Gunakan menu di bawah untuk memulai!"
-            f"{admin_note}"
+        # ✅ Tanya username kustom untuk pemain baru
+        await state.set_state(RegisterState.waiting_username)
+        await state.update_data(uid=uid, uname=uname, fname=fname)
+        await message.answer(
+            f"⛏️ *Selamat Datang di Mining Bot!*\n\n"
+            f"Halo, {fname}! 👋\n\n"
+            f"Sebelum mulai, masukkan *nama/username* yang ingin kamu gunakan di game ini:\n"
+            f"_(Nama ini akan tampil di Profil dan Leaderboard)_\n\n"
+            f"Contoh: `SiPenambang`, `ProMiner99`, dll.\n"
+            f"Atau ketik /skip untuk pakai nama default (`{fname}`).",
+            parse_mode="Markdown"
         )
     else:
         user = await regen_energy(existing)
@@ -54,9 +52,10 @@ async def cmd_start(message: Message):
         admin_badge = " 👑 *[ADMIN]*" if _is_admin(uid) else ""
         bag_slots = user.get("bag_slots", 50)
         ore_used = sum(user.get("ore_inventory", {}).values())
+        display = user.get("display_name") or user.get("first_name", fname)
 
         text = (
-            f"👋 *Selamat kembali, {fname}!*{admin_badge}\n\n"
+            f"👋 *Selamat kembali, {display}!*{admin_badge}\n\n"
             f"🆔 ID       : `{uid}`\n"
             f"💰 Saldo   : `{user['balance']:,}` koin\n"
             f"⚡ Energy  : `{user['energy']}/{user['max_energy']}`\n"
@@ -66,7 +65,63 @@ async def cmd_start(message: Message):
             f"📍 Zona    : {zone['name']}"
             f"{buff_txt}"
         )
+        await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
 
+
+@router.message(Command("skip"))
+async def cmd_skip_username(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != RegisterState.waiting_username:
+        await message.answer("❌ Tidak ada proses registrasi aktif.", parse_mode="Markdown")
+        return
+    data = await state.get_data()
+    await state.clear()
+    uid = data.get("uid", message.from_user.id)
+    uname = data.get("uname", "")
+    fname = data.get("fname", "Miner")
+    await _finish_register(message, uid, uname, fname, fname)
+
+
+@router.message(RegisterState.waiting_username)
+async def process_username(message: Message, state: FSMContext):
+    display_name = message.text.strip()
+    if len(display_name) < 2 or len(display_name) > 30:
+        await message.answer(
+            "❌ Nama harus 2–30 karakter. Coba lagi:",
+            parse_mode="Markdown"
+        )
+        return
+    data = await state.get_data()
+    await state.clear()
+    uid = data.get("uid", message.from_user.id)
+    uname = data.get("uname", "")
+    fname = data.get("fname", "Miner")
+    await _finish_register(message, uid, uname, fname, display_name)
+
+
+async def _finish_register(message: Message, uid: int, uname: str,
+                            fname: str, display_name: str):
+    from config import STARTING_BALANCE
+    await create_user(uid, uname, fname, display_name)
+    admin_note = "\n👑 Kamu adalah *Admin Bot* ini!" if _is_admin(uid) else ""
+    text = (
+        f"⛏️ *Selamat Datang di Mining Bot, {display_name}!*\n\n"
+        f"🎮 Kamu telah bergabung sebagai penambang!\n"
+        f"💰 Saldo awal       : *{STARTING_BALANCE:,} koin*\n"
+        f"⛏️ Alat starter     : *Beliung Batu* (Gratis)\n"
+        f"📍 Zona awal        : *Permukaan*\n"
+        f"⚡ Max Energy       : *500*\n"
+        f"🎒 Slot Bag         : *50 slot*\n\n"
+        f"🆔 Telegram ID: `{uid}`\n"
+        f"👤 Nama Game  : *{display_name}*\n\n"
+        f"📋 *Perintah Berguna:*\n"
+        f"• `/bag` — Lihat & kelola ore\n"
+        f"• `/buyenergy` — Tambah max energy\n"
+        f"• `/buyslot` — Tambah slot bag\n"
+        f"• `/profile` — Lihat profil\n\n"
+        f"🚀 Gunakan menu di bawah untuk memulai!"
+        f"{admin_note}"
+    )
     await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
 
 
@@ -82,9 +137,10 @@ async def cb_main_menu(callback: CallbackQuery):
     admin_badge = " 👑" if _is_admin(uid) else ""
     ore_used = sum(user.get("ore_inventory", {}).values())
     bag_slots = user.get("bag_slots", 50)
+    display = user.get("display_name") or user.get("first_name", "Miner")
     text = (
         f"🏠 *Menu Utama*{admin_badge}\n\n"
-        f"🆔 ID     : `{uid}`\n"
+        f"👤 {display}\n"
         f"💰 Saldo  : `{user['balance']:,}` koin\n"
         f"⚡ Energy : `{user['energy']}/{user['max_energy']}`\n"
         f"⭐ Level  : `{user['level']}`\n"
