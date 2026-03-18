@@ -20,7 +20,10 @@ async def show_leaderboard(message: Message):
 @router.callback_query(F.data == "lb_refresh")
 async def cb_lb_refresh(callback: CallbackQuery):
     text = await _build_lb(callback.from_user.id)
-    await callback.message.edit_text(text, reply_markup=leaderboard_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=leaderboard_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer("🔄 Diperbarui!")
 
 
@@ -29,11 +32,17 @@ async def _build_lb(user_id: int) -> str:
     rank    = await get_user_rank(user_id)
     lines   = ["🏆 *TOP 10 PENAMBANG*\n"]
     for i, p in enumerate(leaders):
-        name = p.get("username") and f"@{p['username']}" or p.get("first_name", "???")
+        # ✅ Tampilkan display_name jika ada, fallback ke username/first_name
+        display = (p.get("display_name") or "").strip()
+        if not display:
+            display = (f"@{p['username']}" if p.get("username")
+                       else p.get("first_name", "???"))
         rebirth = f" 🔄{p['rebirth_count']}" if p.get("rebirth_count", 0) > 0 else ""
+        total = p.get("total_earned", p.get("total_mined", 0))
+        mc = p.get("mine_count", 0)
         lines.append(
-            f"{MEDALS[i]} `{i+1}.` {name}{rebirth}\n"
-            f"       Lv.{p['level']} | `{p['total_mined']:,}` koin"
+            f"{MEDALS[i]} `{i+1}.` {display}{rebirth}\n"
+            f"       Lv.{p['level']} | ⛏️{mc:,}x | 💰`{total:,}` koin"
         )
     lines.append(f"\n📊 Rank kamu: *#{rank}*")
     return "\n".join(lines)
