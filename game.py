@@ -1017,7 +1017,7 @@ async def buy_energy_upgrade(user_id: int, admin: bool = False) -> Tuple[bool, s
         return False, f"❌ *Max Energy sudah di batas maksimal!*\nMaksimal: `{ENERGY_UPGRADE_MAX}` energy"
 
     steps_done = (cur_max - 500) // ENERGY_UPGRADE_STEP
-    price = ENERGY_UPGRADE_BASE_COST + (steps_done * 2000)
+    price = ENERGY_UPGRADE_BASE_COST + (steps_done * 5000)
 
     if not admin and user["balance"] < price:
         return False, f"❌ Koin tidak cukup!\nButuh  : `{price:,}` koin\nPunya  : `{user['balance']:,}` koin"
@@ -1033,7 +1033,7 @@ async def buy_energy_upgrade(user_id: int, admin: bool = False) -> Tuple[bool, s
         f"⚡ Max Energy : `{cur_max}` → `{new_max}`\n"
         f"💰 Biaya      : `{price:,}` koin\n"
         f"💰 Sisa saldo : `{updates.get('balance', user['balance']):,}` koin\n\n"
-        f"Upgrade berikutnya: `{ENERGY_UPGRADE_BASE_COST + (steps_done+1)*2000:,}` koin\n"
+        f"Upgrade berikutnya: `{ENERGY_UPGRADE_BASE_COST + (steps_done+1)*5000:,}` koin\n"
         f"_(Max: {ENERGY_UPGRADE_MAX} energy)_"
     )
 
@@ -1052,7 +1052,7 @@ async def buy_bag_slot(user_id: int, admin: bool = False) -> Tuple[bool, str]:
         return False, f"❌ *Slot Bag sudah di batas maksimal!*\nMaksimal: `{BAG_SLOT_MAX}` slot"
 
     steps_done = (cur_slots - 50) // BAG_SLOT_STEP
-    price = BAG_SLOT_BASE_COST + (steps_done * 500)
+    price = BAG_SLOT_BASE_COST + (steps_done * 2000)
 
     if not admin and user["balance"] < price:
         return False, f"❌ Koin tidak cukup!\nButuh  : `{price:,}` koin\nPunya  : `{user['balance']:,}` koin"
@@ -1068,7 +1068,7 @@ async def buy_bag_slot(user_id: int, admin: bool = False) -> Tuple[bool, str]:
         f"🎒 Slot Bag : `{cur_slots}` → `{new_slots}` slot\n"
         f"💰 Biaya    : `{price:,}` koin\n"
         f"💰 Saldo    : `{updates.get('balance', user['balance']):,}` koin\n\n"
-        f"Upgrade berikutnya: `{BAG_SLOT_BASE_COST + (steps_done+1)*500:,}` koin\n"
+        f"Upgrade berikutnya: `{BAG_SLOT_BASE_COST + (steps_done+1)*2000:,}` koin\n"
         f"_(Max: {BAG_SLOT_MAX} slot)_"
     )
 
