@@ -19,14 +19,24 @@ async def show_inventory(message: Message):
         await message.answer("❌ Ketik /start!")
         return
 
-    inv = {k: v for k, v in user["inventory"].items() if v > 0}
+    text, kb = _build_inventory_text(user)
+    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+
+
+def _build_inventory_text(user: dict):
+    """Build inventory text dan keyboard — dipakai ulang agar konsisten."""
+    inv = {}
+    raw = user.get("inventory") or {}
+    if isinstance(raw, dict):
+        inv = {k: v for k, v in raw.items() if v > 0}
+
     if inv:
         lines = []
         for item_id, qty in inv.items():
             item = ITEMS.get(item_id)
             if item:
                 lines.append(f"   {item['emoji']} *{item['name']}* x{qty}\n      _{item['description']}_")
-        inv_txt = "\n".join(lines)
+        inv_txt = "\n".join(lines) if lines else "   _Inventaris kosong. Beli item di 🏪 Shop!_"
     else:
         inv_txt = "   _Inventaris kosong. Beli item di 🏪 Shop!_"
 
@@ -51,7 +61,8 @@ async def show_inventory(message: Message):
         f"{buff_txt}\n\n"
         f"Tekan item untuk menggunakannya:"
     )
-    await message.answer(text, reply_markup=inventory_kb(inv), parse_mode="Markdown")
+    kb = inventory_kb(inv)
+    return text, kb
 
 
 @router.callback_query(F.data.startswith("use_item_"))
@@ -59,7 +70,15 @@ async def cb_use_item(callback: CallbackQuery):
     item_id = callback.data.replace("use_item_", "")
     ok, msg = await use_item(callback.from_user.id, item_id)
     await callback.answer(msg[:200], show_alert=True)
-    if ok:
-        user = await get_user(callback.from_user.id)
-        inv = {k: v for k, v in user["inventory"].items() if v > 0}
-        await callback.message.edit_reply_markup(reply_markup=inventory_kb(inv))
+
+    # ✅ Selalu refresh full pesan setelah pakai item (bukan hanya markup)
+    user = await get_user(callback.from_user.id)
+    if user:
+        text, kb = _build_inventory_text(user)
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            try:
+                await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            except Exception:
+                pass
