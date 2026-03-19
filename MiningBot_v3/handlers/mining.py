@@ -7,7 +7,7 @@ from config import ADMIN_IDS, TOOLS, ZONES
 from database import get_user
 from game import (perform_mine, build_mine_result_text, regen_energy,
                    energy_full_in, equip_tool, set_zone,
-                   get_mine_cooldown_seconds, check_mine_cooldown)
+                   get_mine_cooldown_seconds, check_mine_cooldown, is_vip_active)
 from config import format_kg, xp_for_level
 from keyboards import mine_action_kb, equip_menu_kb, zone_menu_kb, main_menu_kb
 
@@ -27,7 +27,8 @@ async def _mine_panel(user_id: int) -> str:
     zone = ZONES.get(user.get("current_zone", "surface"), ZONES["surface"])
     is_admin = _is_admin(user_id)
     cooldown = 1 if is_admin else get_mine_cooldown_seconds(user)
-    admin_tag = " 👑 *[ADMIN — Gratis & Cepat]*" if is_admin else ""
+    vip_active = is_vip_active(user)
+    admin_tag = " 👑 *[ADMIN — Gratis & Cepat]*" if is_admin else (" ✨ *[VIP]*" if vip_active else "")
 
     return (
         f"⛏️ *Panel Mining*{admin_tag}\n"
@@ -274,3 +275,89 @@ async def cb_set_zone(callback: CallbackQuery):
             reply_markup=zone_menu_kb(user["unlocked_zones"], user.get("current_zone", "surface")),
             parse_mode="Markdown"
         )
+
+
+async def _do_mine_multi(callback, count: int):
+    """Generic handler untuk mining x banyak."""
+    uid = callback.from_user.id
+    is_admin = _is_admin(uid)
+    await callback.answer(f"⛏️ Mining {count}x... Harap tunggu!")
+
+    from config import format_kg as _fkg
+    total_xp   = 0
+    total_kg   = 0.0
+    ores_found = {}
+    specials   = []
+    crits = luckies = level_ups = 0
+    new_ach    = []
+    last_error = None
+
+    for i in range(count):
+        user = await get_user(uid)
+        if not user:
+            break
+        if not is_admin:
+            can_mine, _ = await check_mine_cooldown(user, is_admin)
+            if not can_mine:
+                cd = get_mine_cooldown_seconds(user, is_admin)
+                await asyncio.sleep(cd)
+
+        r = await perform_mine(uid, is_admin=is_admin)
+        if not r["ok"]:
+            last_error = r["msg"]
+            break
+        total_xp   += r["xp_gain"]
+        total_kg   += r.get("ore_kg", 0.0)
+        ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
+        ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
+        if r["is_crit"]:    crits += 1
+        if r["is_lucky"]:   luckies += 1
+        if r["special_hit"]: specials.append(r["special_hit"])
+        if r["leveled_up"]: level_ups += 1
+        new_ach.extend(r.get("new_achievements", []))
+
+        if not is_admin and i < count - 1:
+            cd = get_mine_cooldown_seconds(user, is_admin)
+            await asyncio.sleep(cd)
+
+    ore_lines = "\n".join(f"   {k}: x{v}" for k, v in ores_found.items()) or "   Tidak ada"
+    user = await get_user(uid)
+
+    lines = [
+        f"⛏️ *Mining x{count} Selesai!*",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"🪨 *Bijih Ditemukan:*\n{ore_lines}",
+        "",
+        f"⭐ Total XP   : `+{total_xp:,}`",
+        f"⚖️ Total KG   : `{_fkg(total_kg)}`",
+        f"💥 Critical   : {crits}x",
+        f"🍀 Lucky      : {luckies}x",
+    ]
+    if specials:
+        lines.append(f"🌟 Special: {', '.join(set(specials))}")
+    if level_ups:
+        lines.append(f"🎉 *Level UP x{level_ups}!*")
+    for a in new_ach:
+        lines.append(f"🏅 Prestasi: *{a['name']}*")
+    if last_error:
+        lines.append(f"\n⚠️ {last_error}")
+    if user:
+        lines.append(f"\n💰 Saldo: `{user['balance']:,}` koin")
+        lines.append(f"⚡ Energy: `{user['energy']}/{user['max_energy']}`")
+
+    text = "\n".join(lines)
+    try:
+        await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "do_mine_25")
+async def cb_do_mine_25(callback: CallbackQuery):
+    await _do_mine_multi(callback, 25)
+
+
+@router.callback_query(F.data == "do_mine_50")
+async def cb_do_mine_50(callback: CallbackQuery):
+    await _do_mine_multi(callback, 50)
