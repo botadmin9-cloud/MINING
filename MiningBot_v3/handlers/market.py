@@ -23,7 +23,7 @@ async def _notify_channel(bot, text: str):
     if not MARKET_CHANNEL_ID:
         return
     try:
-        await bot.send_message(MARKET_CHANNEL_ID, text, parse_mode="HTML")
+        await bot.send_message(MARKET_CHANNEL_ID, text, parse_mode="@miningmarketsell")
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Gagal kirim notif channel: {e}")
