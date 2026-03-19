@@ -119,6 +119,7 @@ async def cb_do_mine_5(callback: CallbackQuery):
             break
         total_xp    += r["xp_gain"]
         total_kg    += r.get("ore_kg", 0.0)
+        total_coins += r.get("coin_gain", 0)
         ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
         ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
         if r["is_crit"]:   crits += 1
@@ -145,6 +146,7 @@ async def cb_do_mine_5(callback: CallbackQuery):
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🪨 *Bijih Ditemukan:*\n{ore_lines}\n\n"
         f"⭐ Total XP   : `+{total_xp:,}`\n"
+        f"💰 Total Koin : `+{total_coins:,}`\n"
         f"⚖️ Total KG   : `{_fkg(total_kg)}`\n"
         f"💥 Critical   : {crits}x\n"
         f"🍀 Lucky      : {luckies}x"
@@ -161,7 +163,7 @@ async def cb_do_mine_10(callback: CallbackQuery):
     is_admin = _is_admin(uid)
     await callback.answer("⛏️ Mining 10x...")
 
-    total_coins = 0  # kept for compat
+    total_coins = 0
     total_xp    = 0
     total_kg    = 0.0
     ores_found  = {}
@@ -186,6 +188,7 @@ async def cb_do_mine_10(callback: CallbackQuery):
             break
         total_xp    += r["xp_gain"]
         total_kg    += r.get("ore_kg", 0.0)
+        total_coins += r.get("coin_gain", 0)
         ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
         ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
         if r["is_crit"]:  crits += 1
@@ -208,6 +211,7 @@ async def cb_do_mine_10(callback: CallbackQuery):
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🪨 *Bijih Ditemukan:*\n{ore_lines}\n\n"
         f"⭐ Total XP   : `+{total_xp:,}`\n"
+        f"💰 Total Koin : `+{total_coins:,}`\n"
         f"⚖️ Total KG   : `{_fkg(total_kg)}`\n"
         f"💥 Critical   : {crits}x\n"
         f"🍀 Lucky      : {luckies}x"
