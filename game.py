@@ -27,7 +27,9 @@ async def regen_energy(user: dict) -> dict:
             minutes = (now - last_dt).total_seconds() / 60
             gain = int(minutes / ENERGY_COOLDOWN_MINUTES)
             if gain > 0:
-                new_e = min(user["energy"] + gain, user["max_energy"])
+                from config import VIP_ENERGY_REGEN_BONUS
+                vip_extra = VIP_ENERGY_REGEN_BONUS if is_vip_active(user) else 0
+                new_e = min(user["energy"] + gain + vip_extra, user["max_energy"])
                 await update_user(user["user_id"], energy=new_e,
                                   last_energy_regen=now.isoformat())
                 user["energy"] = new_e
@@ -50,17 +52,30 @@ def energy_full_in(user: dict) -> str:
 # ══════════════════════════════════════════════════════════════
 # SPEED COOLDOWN SYSTEM
 # ══════════════════════════════════════════════════════════════
+def is_vip_active(user: dict) -> bool:
+    exp = user.get("vip_expires_at")
+    if not exp:
+        return False
+    try:
+        return datetime.fromisoformat(exp) > datetime.now()
+    except Exception:
+        return False
+
+
 def get_mine_cooldown_seconds(user: dict, is_admin: bool = False) -> int:
     if is_admin:
         return 1
     tool_id = user.get("current_tool", "stone_pick")
     tool = TOOLS.get(tool_id, TOOLS["stone_pick"])
-    base_delay = tool.get("speed_delay", 60)
+    base_delay = tool.get("speed_delay", 6)
     buffs = get_active_buffs(user)
     speed_mult = get_buff_val(buffs, "speed_boost", 1.0)
     if speed_mult < 1.0:
         base_delay = int(base_delay * speed_mult)
-    return max(5, base_delay)
+    if is_vip_active(user):
+        from config import VIP_COOLDOWN_REDUCTION
+        base_delay = max(1, int(base_delay * VIP_COOLDOWN_REDUCTION))
+    return max(1, base_delay)
 
 
 async def check_mine_cooldown(user: dict, is_admin: bool = False) -> Tuple[bool, str]:
@@ -247,14 +262,17 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         xp_gain = int(xp_gain * 1.1)
 
     # ── Critical hit (XP bonus) ────────────────────────────────
-    crit_chance = CRITICAL_CHANCE + tool["crit_bonus"]
+    from config import VIP_CRIT_BONUS, VIP_LUCK_BONUS
+    vip_crit_add = VIP_CRIT_BONUS if is_vip_active(user) else 0
+    vip_luck_add = VIP_LUCK_BONUS if is_vip_active(user) else 0
+    crit_chance = CRITICAL_CHANCE + tool["crit_bonus"] + vip_crit_add
     is_crit = random.random() < crit_chance
     if is_crit:
         xp_gain = int(xp_gain * 2)
         ore_kg = round(ore_kg * 1.5, 2)  # crit = ore lebih berat
 
     # ── Lucky bonus (XP & KG) ──────────────────────────────────
-    luck_bonus_val = LUCKY_CHANCE + tool["luck_bonus"] + get_buff_val(buffs, "luck_buff", 0)
+    luck_bonus_val = LUCKY_CHANCE + tool["luck_bonus"] + get_buff_val(buffs, "luck_buff", 0) + vip_luck_add
     is_lucky = random.random() < luck_bonus_val
     if is_lucky and not is_crit:
         xp_gain = int(xp_gain * 1.5)
@@ -623,8 +641,6 @@ async def buy_tool(user_id: int, tool_id: str,
         return False, "❌ Alat tidak ditemukan."
     if tool_id in user["owned_tools"]:
         return False, f"❌ Kamu sudah punya *{tool['name']}*!"
-    if not admin and user["level"] < tool["level_req"]:
-        return False, f"❌ Butuh Level *{tool['level_req']}*! (Kamu Level {user['level']})"
     if not admin and user["balance"] < tool["price"]:
         return False, (f"❌ Koin tidak cukup!\nButuh: `{tool['price']:,}`\nPunya: `{user['balance']:,}`")
 
