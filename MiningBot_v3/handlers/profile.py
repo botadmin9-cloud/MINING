@@ -53,6 +53,20 @@ async def _send_profile(target, user: dict, tg_user):
     e_bar   = make_bar(user["energy"], user["max_energy"], 8)
 
     rebirth_txt = ""
+    # VIP status
+    from datetime import datetime
+    vip_txt = ""
+    vip_exp = user.get("vip_expires_at")
+    if vip_exp:
+        try:
+            exp_dt = datetime.fromisoformat(vip_exp)
+            if exp_dt > datetime.now():
+                days_left = (exp_dt - datetime.now()).days
+                vip_txt = f"\n👑 VIP         : `Aktif ({days_left} hari)`"
+            else:
+                vip_txt = ""
+        except Exception:
+            pass
     if user.get("rebirth_count", 0) > 0:
         rebirth_txt = (f"\n🔄 Rebirth    : `{user['rebirth_count']}x` "
                        f"(Perm XP: `{user.get('perm_xp_mult', 1.0):.1f}x`)")
@@ -93,7 +107,7 @@ async def _send_profile(target, user: dict, tg_user):
         f"   └ Power: `+{tool['power']}` | Speed: `{tool['speed_mult']}x`\n"
         f"📍 Zona Aktif  : {zone['name']}\n"
         f"🏅 Prestasi    : `{len(user['achievements'])}` / `{len(ACHIEVEMENTS)}`"
-        f"{rebirth_txt}\n\n"
+        f"{rebirth_txt}{vip_txt}\n\n"
         f"💡 Ketik `/setname` untuk ganti nama game."
     )
     if isinstance(target, Message):
