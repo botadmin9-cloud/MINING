@@ -44,6 +44,10 @@ async def cmd_adminhelp(message: Message):
         "`/admin_giveore <user_id> <ore_id> <qty>` — Beri ore\n"
         "`/admin_givezone <user_id> <zone_id>` — Buka zona\n"
         "`/admin_reset <user_id>` — Reset data user\n\n"
+        "👑 *VIP Management:*\n"
+        "`/admin_givevip <user_id> <plan_id>` — Beri VIP ke user\n"
+        "`/admin_revokevip <user_id>` — Cabut VIP dari user\n"
+        "_(Plan ID: 1_month, 3_months, 6_months, lifetime)_\n\n"
         "📸 *Foto Admin & Ore:*\n"
         "`/admin_setphoto` — Upload foto profil admin\n"
         "`/admin_myphotos` — Lihat foto profil admin\n"
@@ -570,3 +574,44 @@ async def cmd_delorephoto(message: Message):
     await delete_ore_photo(ore_id)
     ore = ORES.get(ore_id, {})
     await message.answer(f"✅ Foto {ore.get('emoji','')} *{ore.get('name', ore_id)}* dihapus.", parse_mode="Markdown")
+
+
+# ── INLINE CALLBACK for admin panel ──────────────────────────
+
+@router.callback_query(F.data == "admin_stats")
+async def cb_admin_stats(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Bukan admin!", show_alert=True)
+        return
+    from database import get_total_users
+    total = await get_total_users()
+    from config import TOOLS, ORES, ZONES
+    text = (
+        "📊 *Statistik Bot*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 Total User : `{total}`\n"
+        f"⛏️ Total Alat : `{len(TOOLS)}`\n"
+        f"🪨 Total Ore  : `{len(ORES)}`\n"
+        f"🌍 Total Zona : `{len(ZONES)}`\n"
+    )
+    await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_users")
+async def cb_admin_users(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Bukan admin!", show_alert=True)
+        return
+    from database import get_all_users
+    users = await get_all_users()
+    if not users:
+        await callback.answer("Tidak ada user.", show_alert=True)
+        return
+    lines = ["👥 *Daftar User (maks 20):*", ""]
+    for u in users[:20]:
+        name = u.get("display_name") or u.get("first_name") or f"User {u['user_id']}"
+        lines.append(f"• `{u['user_id']}` — {name} (Lv.{u['level']})")
+    text = "\n".join(lines)
+    await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
+    await callback.answer()
