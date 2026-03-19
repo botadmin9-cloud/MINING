@@ -257,9 +257,6 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     kg_xp_bonus = 1.0 + (ore_kg / ore.get("kg_max", 2.0)) * 0.5  # max +50% XP dari KG
     xp_gain = int(base_xp * XP_BASE_MULTIPLIER * xp_mult * perm_xp_mult * tool_xp_bonus * kg_xp_bonus)
 
-    # Tool special XP
-    if tool.get("special") and "XP" in tool.get("special", ""):
-        xp_gain = int(xp_gain * 1.1)
 
     # ── Critical hit (XP bonus) ────────────────────────────────
     from config import VIP_CRIT_BONUS, VIP_LUCK_BONUS
@@ -278,95 +275,8 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         xp_gain = int(xp_gain * 1.5)
         ore_kg = round(ore_kg * 1.2, 2)  # lucky = ore sedikit lebih berat
 
-    # ── Special tool effects ──────────────────────────────────
+    # FIX #8: Special tool effects dihapus
     special_hit = None
-    if tool_id == "electric_drill" and random.random() < 0.08:
-        xp_gain *= 2
-        special_hit = "⚡ Double XP!"
-    elif tool_id == "sonic_drill" and random.random() < 0.05:
-        xp_gain *= 3
-        special_hit = "🔊 Sonic Boom! 3x XP!"
-    elif tool_id == "plasma_drill" and random.random() < 0.12:
-        xp_gain = int(xp_gain * 3)
-        special_hit = "🌟 Plasma Burst! 3x XP!"
-    elif tool_id == "quantum_miner" and random.random() < 0.15:
-        # Get 2 ore at once (add extra ore to bag)
-        xp_gain *= 2
-        await add_ore_to_inventory(user_id, ore_id, 1, ore_kg)
-        special_hit = "🌀 Quantum Shift! 2 ore sekaligus!"
-    elif tool_id == "void_extractor" and random.random() < 0.20:
-        xp_gain *= 2
-        ore_kg = round(ore_kg * 2.0, 2)
-        special_hit = "🕳️ Void Pull! KG 2x!"
-    elif tool_id == "dark_matter_drill" and random.random() < 0.18:
-        xp_gain *= 3
-        special_hit = "🌌 Dark Energy! 3x XP!"
-    elif tool_id == "antimatter_borer" and random.random() < 0.20:
-        xp_gain *= 4
-        special_hit = "💥 Annihilation! 4x XP!"
-    elif tool_id == "celestial_hammer" and random.random() < 0.25:
-        xp_gain *= 5
-        ore_kg = round(ore_kg * 2.0, 2)
-        special_hit = "☄️ Meteor Strike! 5x XP & KG 2x!"
-    elif tool_id == "god_hammer" and random.random() < 0.30:
-        xp_gain *= 10
-        special_hit = "⚡ Divine Strike! 10x XP!"
-    elif tool_id == "genesis_pick" and random.random() < 0.35:
-        xp_gain *= 15
-        ore_kg = round(ore_kg * 2.0, 2)
-        special_hit = "🌅 Genesis Burst! 15x XP & KG 2x!"
-    elif tool_id == "singularity_drill" and random.random() < 0.40:
-        xp_gain *= 10
-        ore_kg = round(ore_kg * 5.0, 2)
-        special_hit = "🌀 Singularity! 10x XP & KG 5x!"
-    elif tool_id == "nano_extractor" and random.random() < 0.15:
-        xp_gain *= 4
-        special_hit = "🧬 Nano Swarm! 4x XP!"
-    elif tool_id == "photon_extractor" and random.random() < 0.10:
-        special_hit = "💡 Light Speed! Energy gratis!"
-    elif tool_id == "tachyon_drill" and random.random() < 0.12:
-        xp_gain *= 4
-        ore_kg = round(ore_kg * 1.5, 2)
-        special_hit = "🌀 Tachyon! 4x XP & KG 1.5x!"
-    elif tool_id == "psionic_drill" and random.random() < 0.12:
-        xp_gain *= 4
-        special_hit = "🧠 Psionic! 4x XP!"
-    elif tool_id == "entropy_drill" and random.random() < 0.18:
-        xp_gain *= 3
-        ore_kg = round(ore_kg * 2.0, 2)
-        special_hit = "🌪️ Entropy! 3x XP & KG 2x!"
-    elif tool_id == "wormhole_drill" and random.random() < 0.20:
-        xp_gain *= 4
-        await add_ore_to_inventory(user_id, ore_id, 1, ore_kg)
-        special_hit = "🌐 Wormhole! 4x XP + ore bonus!"
-    elif tool_id == "star_forge" and random.random() < 0.25:
-        xp_gain *= 6
-        ore_kg = round(ore_kg * 2.0, 2)
-        special_hit = "⭐ Star Forge! 6x XP & KG 2x!"
-    elif tool_id == "eternal_pick" and random.random() < 0.30:
-        xp_gain *= 8
-        ore_kg = round(ore_kg * 3.0, 2)
-        special_hit = "♾️ Eternal! 8x XP & KG 3x!"
-    elif tool_id == "omega_drill" and random.random() < 0.38:
-        xp_gain *= 10
-        ore_kg = round(ore_kg * 2.5, 2)
-        special_hit = "🔱 Omega! 10x XP & KG 2.5x!"
-    elif tool_id == "cosmos_hammer" and random.random() < 0.45:
-        xp_gain *= 15
-        ore_kg = round(ore_kg * 5.0, 2)
-        special_hit = "🌌 Cosmos! 15x XP & KG 5x!"
-    elif tool_id == "neutron_drill" and random.random() < 0.10:
-        xp_gain = int(xp_gain * 3.5)
-        special_hit = "⚛️ Neutron Burst! 3.5x XP!"
-    elif tool_id == "magma_drill" and random.random() < 0.08:
-        xp_gain = int(xp_gain * 2.5)
-        special_hit = "🌋 Magma Burst! 2.5x XP!"
-    elif tool_id == "cobalt_drill" and random.random() < 0.10:
-        ore_kg = round(ore_kg * 1.5, 2)
-        special_hit = "🔵 Cobalt! KG 1.5x!"
-    elif tool_id == "meteor_hammer" and random.random() < 0.12:
-        xp_gain = int(xp_gain * 3)
-        special_hit = "☄️ Meteor! 3x XP!"
 
     # ── Apply changes ─────────────────────────────────────────
     new_energy = user["energy"] - (0 if is_admin else energy_cost)
@@ -393,6 +303,18 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     )
     await update_user(user_id, **updates)
 
+    # FIX #4 & #5: Berikan koin langsung saat mining berdasarkan tool tier
+    buffs_now = get_active_buffs(user)
+    coin_mult_buff = get_buff_val(buffs_now, "coin_mult", 1.0) or 1.0
+    tool_coin_bonus = tool.get("coin_bonus", 1.0)
+    base_coin = max(1, int(ore["value"] * 0.05))  # 5% nilai ore sebagai koin langsung
+    coin_gain = max(1, int(base_coin * tool_coin_bonus * coin_mult_buff))
+    if is_crit:
+        coin_gain = int(coin_gain * 2)
+    elif is_lucky:
+        coin_gain = int(coin_gain * 1.5)
+    await add_balance(user_id, coin_gain, f"Mining {ore['name']}")
+
     # Tambah ore ke ore_inventory (dengan KG)
     await add_ore_to_inventory(user_id, ore_id, 1, ore_kg)
 
@@ -401,7 +323,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     bag_used = sum(user_after.get("ore_inventory", {}).values()) if user_after else 0
 
     await log_mine(user_id, tool_id, tool["name"], zone_id,
-                   ore_id, ore["name"], 0, xp_gain,
+                   ore_id, ore["name"], coin_gain, xp_gain,
                    is_crit, is_lucky, special_hit)
 
     # Update total KG mined (untuk achievement)
@@ -422,6 +344,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         "ore":          ore,
         "ore_kg":       ore_kg,
         "sell_price":   sell_price,
+        "coin_gain":    coin_gain,
         "xp_gain":      xp_gain,
         "is_crit":      is_crit,
         "is_lucky":     is_lucky,
@@ -479,6 +402,7 @@ def build_mine_result_text(r: dict) -> str:
     elif ore_kg >= 0.5: kg_desc = "ringan"
     else: kg_desc = "sangat ringan"
 
+    coin_gain = r.get("coin_gain", 0)
     lines = [
         f"⛏️ *HASIL MINING*",
         f"━━━━━━━━━━━━━━━━━━━━━━",
@@ -490,7 +414,7 @@ def build_mine_result_text(r: dict) -> str:
         f"   {tier_color} {ore['emoji']} *{ore['name']}*",
         f"   └ 💬 _{ore_desc}_",
         f"   └ ⚖️ Berat: `{format_kg(ore_kg)}` _{kg_desc}_",
-        f"   └ 💰 Est. jual: `{sell_price:,}` koin",
+        f"   └ 💰 Koin didapat: `{coin_gain:,}` koin",
         f"",
     ]
 
@@ -502,12 +426,12 @@ def build_mine_result_text(r: dict) -> str:
         f"╔════════════════════╗",
         f"  ⭐  +*{r['xp_gain']:,}* XP",
         f"  📦  +1 {ore['emoji']} {ore['name']} ({format_kg(ore_kg)})",
-        f"  💰  Est. jual: `{sell_price:,}` koin",
+        f"  💰  +`{coin_gain:,}` koin langsung",
         f"╚════════════════════╝",
         f"",
         f"⚡ Energy : {energy_bar} `{r['new_energy']}/{r['max_energy']}`",
         f"⭐ XP     : {xp_bar} `{r['new_xp']:,}/{r['xp_needed']:,}`",
-        f"🎒 Bag    : `{r.get('bag_used',0)}/{r.get('bag_slots',50)}` slot | `{format_kg(r.get('bag_kg_used',0))}/{format_kg(r.get('bag_kg_max',100))}` kg",
+        f"🎒 Bag    : `{r.get('bag_used',0)}/{r.get('bag_slots',50)}` slot",
     ]
 
     if r["leveled_up"]:
