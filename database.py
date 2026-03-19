@@ -50,7 +50,9 @@ async def init_db():
             total_kg_mined  REAL    DEFAULT 0.0,
             perm_xp_mult    REAL    DEFAULT 1.0,
             ore_kg_data     TEXT    DEFAULT '{}',
-            created_at      TEXT    DEFAULT CURRENT_TIMESTAMP
+            created_at      TEXT    DEFAULT CURRENT_TIMESTAMP,
+            vip_expires_at  TEXT    DEFAULT NULL,
+            vip_type        TEXT    DEFAULT NULL
         );
 
         CREATE TABLE IF NOT EXISTS mining_log (
@@ -179,6 +181,10 @@ def _row_to_user(row) -> dict:
         d["perm_xp_mult"] = 1.0
     if "display_name" not in d or d["display_name"] is None:
         d["display_name"] = ""
+    if "vip_expires_at" not in d:
+        d["vip_expires_at"] = None
+    if "vip_type" not in d:
+        d["vip_type"] = None
     return d
 
 
