@@ -22,56 +22,64 @@ async def cmd_adminhelp(message: Message):
     if not is_admin(message.from_user.id):
         return
 
-    text = (
-        "🔐 *PANEL ADMIN — Mining Bot v5*\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "👑 *Keistimewaan Admin:*\n"
-        "• ⚡ Energy tidak pernah berkurang\n"
-        "• 💰 Beli semua alat & item tanpa biaya\n"
-        "• 🌍 Buka zona tanpa biaya & level req\n"
-        "• ⏱️ Speed mining: *1 detik* (tercepat)\n"
-        "• 🪨 Beli alat Legendary tanpa ore\n"
-        "• 🔑 Akses semua perintah admin\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📋 *DAFTAR PERINTAH ADMIN:*\n\n"
-        "👤 *Manajemen User:*\n"
-        "`/admin_info <user_id>` — Lihat info user\n"
-        "`/admin_addcoin <user_id> <jumlah>` — Tambah koin\n"
-        "`/admin_setlevel <user_id> <level>` — Set level\n"
-        "`/admin_setenergy <user_id> <jumlah>` — Set energy\n"
-        "`/admin_givetool <user_id> <tool_id>` — Beri alat\n"
-        "`/admin_giveitem <user_id> <item_id> <qty>` — Beri item\n"
-        "`/admin_giveore <user_id> <ore_id> <qty>` — Beri ore\n"
-        "`/admin_givezone <user_id> <zone_id>` — Buka zona\n"
-        "`/admin_reset <user_id>` — Reset data user\n\n"
-        "👑 *VIP Management:*\n"
-        "`/admin_givevip <user_id> <plan_id>` — Beri VIP ke user\n"
-        "`/admin_revokevip <user_id>` — Cabut VIP dari user\n"
-        "_(Plan ID: 1_month, 3_months, 6_months, lifetime)_\n\n"
-        "📸 *Foto Admin & Ore:*\n"
-        "`/admin_setphoto` — Upload foto profil admin\n"
-        "`/admin_myphotos` — Lihat foto profil admin\n"
-        "`/admin_deletephoto <id>` — Hapus foto profil\n"
-        "`/admin_setorephoto <ore_id>` — Pasang foto untuk ORE tertentu\n"
-        "`/admin_listorephoto` — Lihat semua ore yg punya foto\n"
-        "`/admin_delorephoto <ore_id>` — Hapus foto ore\n\n"
-        "📊 *Statistik:*\n"
-        "`/admin_stats` — Statistik bot keseluruhan\n"
-        "`/admin_users` — Daftar semua user\n\n"
-        "📢 *Broadcast:*\n"
-        "`/admin_broadcast <pesan>` — Kirim pesan ke semua user\n\n"
-        "🎲 *Game Control:*\n"
-        "`/admin_tools` — Daftar semua tool_id\n"
-        "`/admin_items` — Daftar semua item_id\n"
-        "`/admin_zones` — Daftar semua zone_id\n"
-        "`/admin_ores` — Daftar semua ore_id\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💡 *Tips:*\n"
-        "• Gunakan Shop normal untuk beli tanpa bayar\n"
-        "• `/buyslot` dan `/buyenergy` gratis untuk admin\n"
-        "• Admin otomatis terdeteksi dari ADMIN_IDS di .env"
-    )
-    await message.answer(text, parse_mode="Markdown")
+    lines = [
+        "<b>🔐 PANEL ADMIN — Mining Bot v6</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "<b>👑 Keistimewaan Admin:</b>",
+        "• ⚡ Energy tidak pernah berkurang",
+        "• 💰 Beli semua alat & item tanpa biaya",
+        "• 🌍 Buka zona tanpa biaya & level req",
+        "• ⏱ Speed mining: 1 detik (tercepat)",
+        "• 🪨 Beli alat Legendary tanpa ore",
+        "• 🔑 Akses semua perintah admin",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "<b>📋 DAFTAR PERINTAH ADMIN:</b>",
+        "",
+        "<b>👤 Manajemen User:</b>",
+        "/admin_info [user_id] — Lihat info user",
+        "/admin_addcoin [user_id] [jumlah] — Tambah koin",
+        "/admin_setlevel [user_id] [level] — Set level",
+        "/admin_setenergy [user_id] [jumlah] — Set energy",
+        "/admin_givetool [user_id] [tool_id] — Beri alat",
+        "/admin_giveitem [user_id] [item_id] [qty] — Beri item",
+        "/admin_giveore [user_id] [ore_id] [qty] — Beri ore",
+        "/admin_givezone [user_id] [zone_id] — Buka zona",
+        "/admin_reset [user_id] — Reset data user",
+        "",
+        "<b>👑 VIP Management:</b>",
+        "/admin_givevip [user_id] [plan_id] — Beri VIP",
+        "/admin_revokevip [user_id] — Cabut VIP",
+        "<i>Plan ID: 1_month, 3_months, 6_months, lifetime</i>",
+        "",
+        "<b>📸 Foto Admin & Ore:</b>",
+        "/admin_setphoto — Upload foto profil admin",
+        "/admin_myphotos — Lihat foto profil admin",
+        "/admin_deletephoto [id] — Hapus foto profil",
+        "/admin_setorephoto [ore_id] — Pasang foto ORE",
+        "/admin_listorephoto — Lihat semua ore berphoto",
+        "/admin_delorephoto [ore_id] — Hapus foto ore",
+        "",
+        "<b>📊 Statistik & Broadcast:</b>",
+        "/admin_stats — Statistik bot keseluruhan",
+        "/admin_users — Daftar semua user",
+        "/admin_broadcast [pesan] — Broadcast ke semua user",
+        "",
+        "<b>🎲 Game Control:</b>",
+        "/admin_tools — Daftar semua tool_id",
+        "/admin_items — Daftar semua item_id",
+        "/admin_zones — Daftar semua zone_id",
+        "/admin_ores — Daftar semua ore_id",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "<b>💡 Tips:</b>",
+        "• Gunakan Shop normal untuk beli tanpa bayar",
+        "• /buyslot dan /buyenergy gratis untuk admin",
+        "• Admin otomatis terdeteksi dari ADMIN_IDS di .env",
+    ]
+    text = "\n".join(lines)
+    await message.answer(text, parse_mode="HTML")
 
 
 @router.message(Command("admin_setphoto"))
