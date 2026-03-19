@@ -11,6 +11,7 @@ from handlers import (start, mining, shop, profile, inventory,
                        equipment, daily, leaderboard, help,
                        admin, market, bag, favorite_museum)
 from handlers import vip
+from handlers import transfer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +37,8 @@ PLAYER_COMMANDS = [
     BotCommand(command="buyslot",     description="🎒 Beli tambahan slot bag"),
     BotCommand(command="help",        description="❓ Panduan bermain"),
     BotCommand(command="vip",         description="👑 Cek status VIP"),
+    BotCommand(command="transfer",    description="📦 Transfer ore ke pemain lain"),
+    BotCommand(command="transferinfo", description="📊 Info sisa transfer minggu ini"),
 ]
 
 ADMIN_EXTRA_COMMANDS = [
@@ -99,6 +102,7 @@ async def main():
     dp.include_router(bag.router)
     dp.include_router(favorite_museum.router)
     dp.include_router(vip.router)
+    dp.include_router(transfer.router)
 
     await set_bot_commands(bot)
     logger.info("✅ Bot commands set")
