@@ -134,6 +134,10 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN perm_xp_mult REAL DEFAULT 1.0",
             "ALTER TABLE users ADD COLUMN ore_kg_data TEXT DEFAULT '{}'",
             "ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''",
+            # FIX #10: Transfer ore tracking
+            "ALTER TABLE users ADD COLUMN transfer_send_count INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN transfer_receive_count INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN transfer_week_start TEXT DEFAULT NULL",
         ]
         for col_sql in migrations:
             try:
@@ -185,6 +189,13 @@ def _row_to_user(row) -> dict:
         d["vip_expires_at"] = None
     if "vip_type" not in d:
         d["vip_type"] = None
+    # FIX #10: Transfer ore fields
+    if "transfer_send_count" not in d or d["transfer_send_count"] is None:
+        d["transfer_send_count"] = 0
+    if "transfer_receive_count" not in d or d["transfer_receive_count"] is None:
+        d["transfer_receive_count"] = 0
+    if "transfer_week_start" not in d:
+        d["transfer_week_start"] = None
     return d
 
 
@@ -529,3 +540,97 @@ async def delete_ore_photo(ore_id: str) -> bool:
         await db.execute("DELETE FROM ore_photos WHERE ore_id=?", (ore_id,))
         await db.commit()
     return True
+
+# ─────────────────────────────────────────────────────────────
+# FIX #10: TRANSFER ORE — DB helpers
+# ─────────────────────────────────────────────────────────────
+async def get_transfer_week_counts(user_id: int) -> dict:
+    """Ambil hitungan transfer minggu ini. Reset otomatis jika minggu berbeda."""
+    from datetime import datetime, timedelta
+    user = await get_user(user_id)
+    if not user:
+        return {"send": 0, "receive": 0}
+
+    now = datetime.now()
+    week_start_str = user.get("transfer_week_start")
+
+    # Cek apakah sudah berganti minggu (Senin = awal minggu)
+    if week_start_str:
+        try:
+            week_start = datetime.fromisoformat(week_start_str)
+            # Hitung awal minggu saat ini
+            current_week_start = now - timedelta(days=now.weekday())
+            current_week_start = current_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            if week_start < current_week_start:
+                # Reset hitungan karena sudah minggu baru
+                await update_user(user_id,
+                    transfer_send_count=0,
+                    transfer_receive_count=0,
+                    transfer_week_start=current_week_start.isoformat()
+                )
+                return {"send": 0, "receive": 0}
+        except Exception:
+            pass
+
+    return {
+        "send": user.get("transfer_send_count", 0),
+        "receive": user.get("transfer_receive_count", 0)
+    }
+
+
+async def increment_transfer_send(user_id: int):
+    """Tambah hitungan kirim transfer minggu ini."""
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    current_week_start = now - timedelta(days=now.weekday())
+    current_week_start = current_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    user = await get_user(user_id)
+    if not user:
+        return
+    week_start_str = user.get("transfer_week_start")
+    send_count = user.get("transfer_send_count", 0)
+
+    if week_start_str:
+        try:
+            week_start = datetime.fromisoformat(week_start_str)
+            if week_start < current_week_start:
+                send_count = 0
+        except Exception:
+            send_count = 0
+    else:
+        send_count = 0
+
+    await update_user(user_id,
+        transfer_send_count=send_count + 1,
+        transfer_week_start=current_week_start.isoformat()
+    )
+
+
+async def increment_transfer_receive(user_id: int):
+    """Tambah hitungan terima transfer minggu ini."""
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    current_week_start = now - timedelta(days=now.weekday())
+    current_week_start = current_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    user = await get_user(user_id)
+    if not user:
+        return
+    week_start_str = user.get("transfer_week_start")
+    receive_count = user.get("transfer_receive_count", 0)
+
+    if week_start_str:
+        try:
+            week_start = datetime.fromisoformat(week_start_str)
+            if week_start < current_week_start:
+                receive_count = 0
+        except Exception:
+            receive_count = 0
+    else:
+        receive_count = 0
+
+    await update_user(user_id,
+        transfer_receive_count=receive_count + 1,
+        transfer_week_start=current_week_start.isoformat()
+    )
