@@ -35,9 +35,13 @@ def back_main_kb() -> InlineKeyboardMarkup:
 def mine_action_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="⛏️ Mine!", callback_data="do_mine"),
-            InlineKeyboardButton(text="⛏️x5", callback_data="do_mine_5"),
-            InlineKeyboardButton(text="⛏️x10", callback_data="do_mine_10"),
+            InlineKeyboardButton(text="⛏️ Mine!",  callback_data="do_mine"),
+            InlineKeyboardButton(text="⛏️x5",       callback_data="do_mine_5"),
+            InlineKeyboardButton(text="⛏️x10",      callback_data="do_mine_10"),
+        ],
+        [
+            InlineKeyboardButton(text="⛏️x25",      callback_data="do_mine_25"),
+            InlineKeyboardButton(text="⛏️x50",      callback_data="do_mine_50"),
         ],
         [
             InlineKeyboardButton(text="📍 Ganti Zona", callback_data="zone_menu"),
@@ -52,10 +56,12 @@ def mine_action_kb() -> InlineKeyboardMarkup:
 # ══════════════════════════════════════════════════════════════
 def shop_main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⛏️ Alat Mining",      callback_data="shop_tools_0")],
-        [InlineKeyboardButton(text="🎒 Item & Consumable",  callback_data="shop_items")],
-        [InlineKeyboardButton(text="🌍 Buka Zona Baru",   callback_data="shop_zones")],
-        [InlineKeyboardButton(text="🏠 Menu Utama",       callback_data="main_menu")],
+        [InlineKeyboardButton(text="⛏️ Alat Mining",          callback_data="shop_tools_0")],
+        [InlineKeyboardButton(text="🎒 Item & Consumable",      callback_data="shop_items")],
+        [InlineKeyboardButton(text="🌍 Buka Zona Baru",        callback_data="shop_zones")],
+        [InlineKeyboardButton(text="👑 VIP Member",             callback_data="shop_vip")],
+        [InlineKeyboardButton(text="💰 Top Up Saldo",           callback_data="shop_topup")],
+        [InlineKeyboardButton(text="🏠 Menu Utama",            callback_data="main_menu")],
     ])
 
 
@@ -74,8 +80,6 @@ def shop_tools_kb(owned: list, level: int, balance: int, page: int = 0,
 
         if tid in owned:
             label = f"✅ {t['emoji']} {t['name']}"
-        elif level < t["level_req"]:
-            label = f"🔒 {tier_icon} {t['name']} (Lv.{t['level_req']})"
         elif balance < t["price"] and t["price"] > 0:
             label = f"💸 {tier_icon} {t['name']} ({t['price']:,}🪙)"
         elif ore_req and not all(ore_inv.get(k, 0) >= v for k, v in ore_req.items()):
@@ -333,4 +337,49 @@ def admin_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📊 Statistik Bot", callback_data="admin_stats")],
         [InlineKeyboardButton(text="👥 Daftar User",   callback_data="admin_users")],
         [InlineKeyboardButton(text="🏠 Menu Utama",    callback_data="main_menu")],
+    ])
+
+
+# ══════════════════════════════════════════════════════════════
+# VIP SHOP
+# ══════════════════════════════════════════════════════════════
+def vip_shop_kb(has_vip: bool = False) -> InlineKeyboardMarkup:
+    from config import VIP_PRICES
+    rows = []
+    for pid, pdata in VIP_PRICES.items():
+        rows.append([InlineKeyboardButton(
+            text=f"👑 {pdata['label']} — Rp {pdata['price']:,}",
+            callback_data=f"vip_buy_{pid}"
+        )])
+    rows.append([InlineKeyboardButton(text="📸 Kirim Bukti Transfer", callback_data="vip_proof")])
+    rows.append([InlineKeyboardButton(text="🔙 Kembali ke Shop", callback_data="shop_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def vip_proof_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Saya Sudah Transfer", callback_data="vip_confirm_transfer")],
+        [InlineKeyboardButton(text="🔙 Kembali", callback_data="shop_vip")],
+    ])
+
+
+def topup_shop_kb() -> InlineKeyboardMarkup:
+    packages = [
+        ("💰 Rp 10.000 → 10 Juta Koin",  "topup_10k"),
+        ("💰 Rp 25.000 → 50 Juta Koin",  "topup_25k"),
+        ("💰 Rp 50.000 → 100 Juta Koin",  "topup_50k"),
+        ("💰 Rp 125.000 → 250 Juta Koin","topup_125k"),
+        ("💰 Rp 250.000 → 500 Juta Koin","topup_250k"),
+        ("💎 Rp 500.000 → 2 Milyar Koin","topup_500k"),
+    ]
+    rows = [[InlineKeyboardButton(text=t, callback_data=d)] for t, d in packages]
+    rows.append([InlineKeyboardButton(text="📸 Kirim Bukti Transfer", callback_data="topup_proof")])
+    rows.append([InlineKeyboardButton(text="🔙 Kembali ke Shop", callback_data="shop_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def topup_proof_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Saya Sudah Transfer", callback_data="topup_confirm_transfer")],
+        [InlineKeyboardButton(text="🔙 Kembali", callback_data="shop_topup")],
     ])
