@@ -6,28 +6,44 @@ from keyboards import main_menu_kb
 router = Router()
 
 HELP_TEXT = """
-❓ *BANTUAN — MiningBot v4 ULTIMATE*
+❓ *BANTUAN — MiningBot v6 ULTIMATE*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎮 *CARA BERMAIN:*
 1️⃣ Mining ore → masuk ke Bag
 2️⃣ Jual ore di Bag atau Market
 3️⃣ Gunakan koin untuk beli alat & item
-4️⃣ Level up untuk buka konten baru!
+4️⃣ Level up untuk XP & koin lebih banyak!
 
 ⚖️ *SISTEM KG:*
-• Setiap ore punya berat (kg_min — kg_max)
+• Setiap ore punya berat hingga *100.000 KG*
 • Ore lebih berat = harga jual lebih tinggi
-• Harga jual = nilai_dasar × berat_kg × 1.5
+• Harga jual = nilai × berat_kg × 1.5
 • Alat lebih canggih = ore lebih berat!
-• Gunakan ⚖️ Weight Enhancer untuk boost KG
 
 ⭐ *SISTEM XP:*
-• Mining fokus memberikan XP (bukan koin)
-• Koin didapat dari MENJUAL ore di Bag/Market
+• Mining memberikan XP (koin dari jual ore)
 • Ore lebih berat = XP lebih banyak
 • Critical hit = XP 2x + ore lebih berat
 • Lucky = XP 1.5x + ore sedikit lebih berat
+
+⛏️ *MINING:*
+• Cooldown dasar: *6 detik* (tier 1)
+• Alat makin canggih = cooldown makin cepat
+• Mining: x1 / x5 / x10 / *x25* / *x50*
+• Semua pemain bisa mining x5 hingga x50!
+
+👑 *SISTEM VIP:*
+• Cooldown mining lebih cepat 15%
+• Energy recovery lebih cepat
+• Luck +3% | Critical +2%
+• Badge VIP di profil
+• Beli VIP di: 🏪 Shop → 👑 VIP Member
+
+💰 *TOP UP SALDO:*
+• Beli koin dengan transfer bank
+• Tersedia 6 paket dari Rp 10.000 – Rp 500.000
+• Beli di: 🏪 Shop → 💰 Top Up Saldo
 
 ⚡ *PERINTAH UTAMA:*
 /mine — Buka panel mining
@@ -38,10 +54,10 @@ HELP_TEXT = """
 /daily — Ambil bonus harian
 /market — Jual beli ore antar pemain
 /leaderboard — Papan peringkat
+/vip — Cek status VIP kamu
 
 🎒 *UPGRADE BAG:*
 /buyslot — +10 slot bag
-/buykg — +50 kg kapasitas bag
 /slotinfo — Info harga upgrade bag
 
 ⚡ *UPGRADE ENERGY:*
@@ -49,16 +65,16 @@ HELP_TEXT = """
 /energyinfo — Info harga upgrade energy
 
 💡 *TIPS:*
-• Gunakan zona lebih dalam = ore lebih langka
+• Zona lebih dalam = ore lebih langka & mahal
 • Daily streak memberikan bonus berlipat
-• Premium Mystery Box bisa dapat ore legendaris
-• Rebirth Token reset level tapi +50% XP permanent
-• Alat Tier 8 Divine menghasilkan XP 50x!
+• Alat tidak membutuhkan syarat level apapun!
+• Alat tier 6+ perlu sedikit ore untuk dibeli
+• VIP = cara terbaik farming lebih efisien
 
-🌍 *ZONA:* 12 zona dari Permukaan hingga Alam Genesis
-⛏️ *ALAT:* 25 alat dari Tier 1 Starter hingga Tier 8 Divine
-🪨 *ORE:* 38 jenis ore dari Kerikil hingga Inti Semesta
-🎒 *ITEM:* 18 item termasuk KG Boost baru!
+🌍 *ZONA:* 20 zona dari Permukaan hingga Alam Genesis
+⛏️ *ALAT:* 48 alat dari Tier 1 Starter hingga Tier 8 Divine
+🪨 *ORE:* 113 jenis ore dari Kerikil hingga Permata Tak Terbatas
+🎒 *ITEM:* Puluhan item termasuk buff XP, luck, speed, & KG!
 """
 
 @router.message(F.text == "❓ Bantuan")
