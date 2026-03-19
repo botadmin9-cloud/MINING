@@ -14,6 +14,20 @@ from keyboards import (market_main_kb, market_listing_kb, market_my_listings_kb,
 
 router = Router()
 
+# ══════════════════════════════════════════════════════════════
+# FIX #9: Helper kirim notifikasi ke channel Telegram
+# ══════════════════════════════════════════════════════════════
+async def _notify_channel(bot, text: str):
+    """Kirim notifikasi ke MARKET_CHANNEL_ID jika dikonfigurasi."""
+    from config import MARKET_CHANNEL_ID
+    if not MARKET_CHANNEL_ID:
+        return
+    try:
+        await bot.send_message(MARKET_CHANNEL_ID, text, parse_mode="HTML")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Gagal kirim notif channel: {e}")
+
 
 class SellOreState(StatesGroup):
     waiting_ore    = State()
@@ -154,6 +168,19 @@ async def cb_market_confirm_buy(callback: CallbackQuery):
             f"🆔 ID Penjual  : `{listing['seller_id']}`\n"
             f"🆔 ID Kamu     : `{callback.from_user.id}`"
         )
+        # FIX #9: Notifikasi ke channel saat terjual
+        buyer_name = callback.from_user.username or callback.from_user.first_name
+        channel_sold = (
+            f"✅ <b>ORE TERJUAL DI MARKET!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{listing['ore_emoji']} <b>{listing['ore_name']}</b> x{listing['quantity']}\n"
+            f"💰 Harga Total : <code>{listing['price_total']:,}</code> koin\n"
+            f"👤 Penjual     : {seller_tag}\n"
+            f"👤 Pembeli     : @{buyer_name}\n"
+            f"🆔 Listing ID  : #{listing['id']}"
+        )
+        await _notify_channel(callback.bot, channel_sold)
+
         await callback.answer("✅ Berhasil dibeli!", show_alert=True)
         await callback.message.edit_text(full_msg, reply_markup=back_main_kb(), parse_mode="Markdown")
 
@@ -310,6 +337,20 @@ async def process_sell_price(message: Message, state: FSMContext):
     from game import _grant_if_new
     await _grant_if_new(message.from_user.id, "market_first")
 
+    seller_tag = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+    # FIX #9: Notifikasi ke channel
+    channel_msg = (
+        f"🛒 <b>LISTING BARU DI MARKET!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"{data['ore_emoji']} <b>{data['ore_name']}</b> x{qty}\n"
+        f"💰 Harga/buah : <code>{price_each:,}</code> koin\n"
+        f"💰 Total      : <code>{price_total:,}</code> koin\n"
+        f"👤 Penjual    : {seller_tag}\n"
+        f"🆔 Listing ID : #{listing_id}\n\n"
+        f"Beli di /market!"
+    )
+    await _notify_channel(message.bot, channel_msg)
+
     await message.answer(
         f"✅ *Listing Berhasil Dibuat!*\n\n"
         f"{data['ore_emoji']} *{data['ore_name']}* x{qty}\n"
@@ -350,6 +391,19 @@ async def cb_market_cancel(callback: CallbackQuery):
     ok, msg = await cancel_market_listing(listing_id, callback.from_user.id)
     await callback.answer(msg[:200], show_alert=True)
     if ok:
+        # FIX #9: Notifikasi ke channel saat dibatalkan
+        listing_info = await get_listing_by_id(listing_id)
+        if listing_info:
+            seller_name = callback.from_user.username or callback.from_user.first_name
+            channel_cancel = (
+                f"❌ <b>LISTING DIBATALKAN</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{listing_info.get('ore_emoji','')} <b>{listing_info.get('ore_name','')}</b> x{listing_info.get('quantity',0)}\n"
+                f"💰 Harga : <code>{listing_info.get('price_total',0):,}</code> koin\n"
+                f"👤 Penjual: @{seller_name}\n"
+                f"🆔 ID: #{listing_id}"
+            )
+            await _notify_channel(callback.bot, channel_cancel)
         listings = await get_user_market_listings(callback.from_user.id)
         await callback.message.edit_text(
             f"📦 *Listing Aktif Kamu ({len(listings)})*",
