@@ -263,22 +263,18 @@ def format_kg(kg: float) -> str:
 
 ITEMS: dict = {
     "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":2000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
-    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":5000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
-    "energy_potion_lg":   {"name":"⚡⚡ Energy Potion XL",         "emoji":"⚡","price":15000,      "description":"Pulihkan energy PENUH seketika.",                                      "effect":{"energy":9999},                                 "stackable":True},
-    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":20000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
-    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":50000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
+    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":25000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
+    "energy_potion_lg":   {"name":"⚡⚡ Energy Potion XL",         "emoji":"⚡","price":100000,      "description":"Pulihkan energy PENUH seketika.",                                      "effect":{"energy":9999},                                 "stackable":True},
+    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":50000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
+    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":150000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
     "luck_elixir":        {"name":"🍀 Luck Elixir",                "emoji":"🍀","price":20000,      "description":"+25% peluang rare ore selama 30 menit.",                               "effect":{"luck_buff":0.25,"duration":30},                 "stackable":True},
     "mega_luck_potion":   {"name":"🌟 Mega Luck Potion",           "emoji":"🌟","price":60000,      "description":"+50% peluang rare ore selama 45 menit.",                               "effect":{"luck_buff":0.50,"duration":45},                 "stackable":True},
     "ore_magnet":         {"name":"🧲 Ore Magnet",                  "emoji":"🧲","price":45000,      "description":"+35% chance rare ore selama 60 menit.",                                "effect":{"luck_buff":0.35,"duration":60},                 "stackable":True},
     "fortune_cookie":     {"name":"🥠 Fortune Cookie",              "emoji":"🥠","price":8000,       "description":"+15% luck selama 20 menit.",                                           "effect":{"luck_buff":0.15,"duration":20},                 "stackable":True},
     "rainbow_gem":        {"name":"🌈 Rainbow Gem",                 "emoji":"🌈","price":100000,     "description":"+70% luck selama 30 menit!",                                           "effect":{"luck_buff":0.70,"duration":30},                 "stackable":True},
     "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":250000,     "description":"+100% luck selama 20 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
-    "xp_boost":           {"name":"⭐ XP Booster",                  "emoji":"⭐","price":25000,      "description":"3x XP selama 30 menit.",                                               "effect":{"xp_mult":3.0,"duration":30},                    "stackable":True},
     "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":80000,      "description":"5x XP selama 20 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
-    "scholar_scroll":     {"name":"📜 Gulungan Cendekiawan",         "emoji":"📜","price":40000,      "description":"2x XP selama 60 menit.",                                               "effect":{"xp_mult":2.0,"duration":60},                    "stackable":True},
-    "xp_nova":            {"name":"💥 XP Nova",                     "emoji":"💥","price":180000,     "description":"10x XP selama 10 menit!",                                              "effect":{"xp_mult":10.0,"duration":10},                   "stackable":True},
-    "ancient_tome":       {"name":"📚 Kitab Kuno",                   "emoji":"📚","price":120000,     "description":"4x XP selama 45 menit.",                                               "effect":{"xp_mult":4.0,"duration":45},                    "stackable":True},
-    "celestial_scroll":   {"name":"🌟 Gulungan Celestial",           "emoji":"🌟","price":350000,     "description":"8x XP selama 15 menit!",                                               "effect":{"xp_mult":8.0,"duration":15},                    "stackable":True},
+    "xp_nova":            {"name":"💥 XP Nova",                     "emoji":"💥","price":200000,     "description":"10x XP selama 10 menit!",                                              "effect":{"xp_mult":10.0,"duration":10},                   "stackable":True},
     "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":30000,      "description":"Cooldown mining -50% selama 20 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
     "turbo_boost":        {"name":"⚡ Turbo Boost",                  "emoji":"⚡","price":80000,      "description":"Cooldown mining -75% selama 15 menit!",                                "effect":{"speed_boost":0.25,"duration":15},               "stackable":True},
     "warp_drive":         {"name":"🌀 Warp Drive",                   "emoji":"🌀","price":200000,     "description":"Cooldown mining -90% selama 10 menit!",                                "effect":{"speed_boost":0.10,"duration":10},               "stackable":True},
@@ -295,14 +291,7 @@ ITEMS: dict = {
     "mystery_box":        {"name":"📦 Mystery Box",                  "emoji":"📦","price":12000,      "description":"Kotak misterius! Isi acak bisa XP, item, atau ore.",                    "effect":{"mystery":True},                                 "stackable":True},
     "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":100000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
     "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
-    "bag_expander":       {"name":"🎒 Bag Expander",                 "emoji":"🎒","price":25000,      "description":"+5 slot bag instan.",                                                   "effect":{"bag_expand":True},                              "stackable":True},
-    "mega_bag_expander":  {"name":"🎒🎒 Mega Bag Expander",          "emoji":"🎒","price":75000,      "description":"+15 slot bag instan!",                                                  "effect":{"mega_bag_expand":True},                         "stackable":True},
     "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":2500000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
-    "double_coin":        {"name":"💰 Double Sell Scroll",           "emoji":"💰","price":35000,      "description":"2x harga jual ore di bag selama 20 menit.",                             "effect":{"coin_mult":2.0,"duration":20},                  "stackable":True},
-    "triple_coin":        {"name":"💰💰 Triple Sell Scroll",         "emoji":"💰","price":85000,      "description":"3x harga jual ore selama 15 menit!",                                    "effect":{"coin_mult":3.0,"duration":15},                  "stackable":True},
-    "auto_sell_charm":    {"name":"🤖 Auto-Sell Charm",              "emoji":"🤖","price":50000,      "description":"2x harga jual + 1.5x XP selama 30 menit.",                              "effect":{"coin_mult":2.0,"xp_mult":1.5,"duration":30},   "stackable":True},
-    "ore_detector":       {"name":"📡 Ore Detector",                  "emoji":"📡","price":40000,      "description":"+40% luck selama 45 menit.",                                            "effect":{"luck_buff":0.40,"duration":45},                 "stackable":True},
-    "explosive_charge":   {"name":"💣 Explosive Charge",             "emoji":"💣","price":25000,      "description":"+3x KG ore selama 10 menit.",                                           "effect":{"kg_boost":3.0,"duration":10},                   "stackable":True},
 }
 
 ACHIEVEMENTS: dict = {
@@ -376,7 +365,7 @@ ZONES: dict = {
     "genesis_realm":    {"name":"🌅 Alam Genesis",        "desc":"Tempat penciptaan. Universe Core, God Tear, Creation Spark!",            "level_req":350, "ore_bonus":{"universe_core":2.0,"eternity_stone":2.5,"god_tear":3.0,"creation_spark":3.5,"omega_shard":3.0,"infinity_gem":2.5},"unlock_cost":20000000000,"kg_bonus":3.0},
 }
 
-TIER_COLORS = {1:"⬜",2:"🟩",3:"🟦",4:"🟧",5:"🟥",6:"💜",7:"⭐",8:"🌈"}
-ORE_TIER_COLORS = {"common":"⬜","uncommon":"🟩","rare":"🟦","epic":"🟧","legendary":"🟥","mythical":"💜","cosmic":"⭐","divine":"🌈"}
+TIER_COLORS = {1:"⚪️",2:"🟢",3:"🔵",4:"🟠",5:"🔴",6:"💜",7:"🌟",8:"🌈"}
+ORE_TIER_COLORS = {"common":"⚪️","uncommon":"🟢","rare":"🔵","epic":"🟠","legendary":"🔴","mythical":"💜","cosmic":"🌟","divine":"🌈"}
 
 MARKET_FEE_PERCENT = 5
