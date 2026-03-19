@@ -85,7 +85,7 @@ async def _bag_text(user: dict, page: int) -> tuple:
         f"📦 Slot    : `{total_qty}/{bag_slots}`\n"
         f"🪨 Jenis   : `{len(sorted_items)}`\n"
         f"💰 Est.Jual: `{est_value:,}` koin\n\n"
-        f"💡 Harga jual = nilai ore × berat (kg) × 1.5\n\n"
+        f"💡 Harga jual = nilai ore × berat × 0.3\n\n"
         f"Klik ore untuk detail, atau langsung jual:"
     )
     kb = _bag_kb(chunk, page, total_pages, user)
