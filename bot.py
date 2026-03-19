@@ -10,6 +10,7 @@ from database import init_db
 from handlers import (start, mining, shop, profile, inventory,
                        equipment, daily, leaderboard, help,
                        admin, market, bag, favorite_museum)
+from handlers import vip
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +35,7 @@ PLAYER_COMMANDS = [
     BotCommand(command="buyenergy",   description="⚡ Beli tambahan max energy"),
     BotCommand(command="buyslot",     description="🎒 Beli tambahan slot bag"),
     BotCommand(command="help",        description="❓ Panduan bermain"),
+    BotCommand(command="vip",         description="👑 Cek status VIP"),
 ]
 
 ADMIN_EXTRA_COMMANDS = [
@@ -50,16 +52,15 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="admin_giveore",         description="🪨 Beri ore ke user"),
     BotCommand(command="admin_givezone",        description="🌍 Buka zona untuk user"),
     BotCommand(command="admin_reset",           description="🔄 Reset data user"),
-    BotCommand(command="admin_setphoto",        description="📸 Upload foto admin"),
-    BotCommand(command="admin_myphotos",        description="📸 Lihat foto admin"),
     BotCommand(command="admin_setorephoto",     description="📸 Pasang foto ore"),
     BotCommand(command="admin_listorephoto",    description="📸 Daftar foto ore"),
     BotCommand(command="admin_delorephoto",     description="📸 Hapus foto ore"),
+    BotCommand(command="admin_givevip",         description="👑 Beri VIP ke user"),
+    BotCommand(command="admin_revokevip",       description="👑 Cabut VIP dari user"),
     BotCommand(command="admin_tools",           description="🔧 Daftar tool_id"),
     BotCommand(command="admin_items",           description="🎒 Daftar item_id"),
     BotCommand(command="admin_zones",           description="🌍 Daftar zone_id"),
     BotCommand(command="admin_ores",            description="🪨 Daftar ore_id"),
-    BotCommand(command="admin_deletephoto",     description="📸 Hapus foto admin"),
 ]
 
 
@@ -77,7 +78,7 @@ async def set_bot_commands(bot: Bot):
 
 async def main():
     await init_db()
-    logger.info("✅ Database initialized (v5 FIXED)")
+    logger.info("✅ Database initialized (v6 ULTIMATE)")
 
     bot = Bot(token=BOT_TOKEN)
     # ✅ MemoryStorage diperlukan untuk FSM (registrasi username & setname)
@@ -97,11 +98,12 @@ async def main():
     dp.include_router(market.router)
     dp.include_router(bag.router)
     dp.include_router(favorite_museum.router)
+    dp.include_router(vip.router)
 
     await set_bot_commands(bot)
     logger.info("✅ Bot commands set")
 
-    logger.info("🤖 Mining Bot v5 FIXED starting...")
+    logger.info("🤖 Mining Bot v6 ULTIMATE starting...")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
