@@ -7,7 +7,7 @@ from config import (ORES, ADMIN_IDS,
                     ENERGY_UPGRADE_MAX, ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_BASE_COST,
                     calculate_sell_price, format_kg)
 from database import get_user, update_user, add_balance
-from game import buy_bag_slot, buy_energy_upgrade
+from game import buy_bag_slot, buy_energy_upgrade, buy_bag_kg
 from keyboards import back_main_kb
 
 router = Router()
@@ -614,13 +614,9 @@ async def cmd_buyslot(message: Message):
 
 @router.message(Command("buykg"))
 async def cmd_buykg(message: Message):
-    await message.answer(
-        "🎒 *Kapasitas Bag*\n\n"
-        "Kapasitas berat bag sekarang *tidak terbatas* (∞)!\n\n"
-        "Kamu hanya perlu upgrade *slot* bag untuk menampung lebih banyak ore.\n"
-        "Gunakan `/buyslot` untuk menambah slot.",
-        parse_mode="Markdown"
-    )
+    is_admin_user = _is_admin(message.from_user.id)
+    ok, msg = await buy_bag_kg(message.from_user.id, admin=is_admin_user)
+    await message.answer(msg, parse_mode="Markdown")
 
 
 @router.message(Command("slotinfo"))
@@ -630,21 +626,31 @@ async def cmd_slotinfo(message: Message):
         await message.answer("❌ Ketik /start!")
         return
 
+    from config import BAG_KG_MAX, BAG_KG_UPGRADE_STEP, BAG_KG_UPGRADE_COST
     cur_slots  = user.get("bag_slots", BAG_SLOT_DEFAULT)
+    cur_kg_max = user.get("bag_kg_max", 100.0)
+    cur_kg_used = user.get("bag_kg_used", 0.0)
     ore_used   = sum(user.get("ore_inventory", {}).values())
-    steps_done = (cur_slots - BAG_SLOT_DEFAULT) // BAG_SLOT_STEP
-    next_price = BAG_SLOT_BASE_COST + (steps_done * 2000)
+    steps_slot = (cur_slots - BAG_SLOT_DEFAULT) // BAG_SLOT_STEP
+    next_slot_price = BAG_SLOT_BASE_COST + (steps_slot * 2000)
+    steps_kg = int((cur_kg_max - 100.0) // BAG_KG_UPGRADE_STEP)
+    next_kg_price = BAG_KG_UPGRADE_COST + (steps_kg * 1000)
 
     lines = [
         f"🎒 *Info Bag*",
         f"━━━━━━━━━━━━━━━━━━━━",
         f"📦 Slot     : `{ore_used}/{cur_slots}`",
-        f"⚖️ Berat    : ∞ _(tidak terbatas)_",
+        f"⚖️ Berat    : `{format_kg(cur_kg_used)}/{format_kg(cur_kg_max)}`",
         f"",
-        f"💰 Upgrade slot: `{next_price:,}` koin (+{BAG_SLOT_STEP} slot)",
+        f"💰 Upgrade slot : `{next_slot_price:,}` koin (+{BAG_SLOT_STEP} slot)",
         f"   Ketik `/buyslot` untuk upgrade",
+        f"",
+        f"💰 Upgrade KG   : `{next_kg_price:,}` koin (+{format_kg(BAG_KG_UPGRADE_STEP)})",
+        f"   Ketik `/buykg` untuk upgrade",
         f"   _(Harga naik tiap upgrade)_",
     ]
+    if cur_kg_max >= BAG_KG_MAX:
+        lines.append(f"\n✅ *Kapasitas KG sudah maksimal ({format_kg(BAG_KG_MAX)})!*")
     await message.answer("\n".join(lines), parse_mode="Markdown")
 
 
