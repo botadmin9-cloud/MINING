@@ -8,7 +8,8 @@ from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT, calculate_sell_price, fo
 from database import (get_user, get_market_listings, get_listing_by_id,
                        buy_market_listing, cancel_market_listing,
                        get_user_market_listings, create_market_listing,
-                       remove_ore_from_inventory)
+                       remove_ore_from_inventory, get_market_daily_count,
+                       increment_market_daily_count)
 from keyboards import (market_main_kb, market_listing_kb, market_my_listings_kb,
                         ore_inventory_kb, back_main_kb)
 
@@ -23,7 +24,7 @@ async def _notify_channel(bot, text: str):
     if not MARKET_CHANNEL_ID:
         return
     try:
-        await bot.send_message(MARKET_CHANNEL_ID, text, parse_mode="@miningmarketsell")
+        await bot.send_message(MARKET_CHANNEL_ID, text, parse_mode="HTML")
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Gagal kirim notif channel: {e}")
@@ -41,10 +42,17 @@ class SellOreState(StatesGroup):
 @router.message(F.text == "🛒 Market")
 @router.message(Command("market"))
 async def show_market(message: Message):
+    uid = message.from_user.id
+    from config import ADMIN_IDS
+    daily_left = ""
+    if uid not in ADMIN_IDS:
+        cnt = await get_market_daily_count(uid)
+        remaining = max(0, 3 - cnt)
+        daily_left = f"\n📊 Sisa listing hari ini: *{remaining}/3*"
     await message.answer(
-        "🛒 *Market Ore*\n\n"
-        "Jual beli ore dengan pemain lain!\n"
-        f"💡 Biaya listing: *{MARKET_FEE_PERCENT}%* dari total harga jual.",
+        f"🛒 *Market Ore*\n\n"
+        f"Jual beli ore dengan pemain lain!\n"
+        f"💡 Biaya listing: *{MARKET_FEE_PERCENT}%* dari total harga jual.{daily_left}",
         reply_markup=market_main_kb(),
         parse_mode="Markdown"
     )
@@ -308,6 +316,24 @@ async def process_sell_price(message: Message, state: FSMContext):
     fee = int(price_total * MARKET_FEE_PERCENT / 100)
     seller_gets = price_total - fee
 
+    # Cek batas listing harian (3x per hari, admin bebas)
+    uid = message.from_user.id
+    from config import ADMIN_IDS
+    MARKET_DAILY_LIMIT = 3
+    if uid not in ADMIN_IDS:
+        daily_count = await get_market_daily_count(uid)
+        if daily_count >= MARKET_DAILY_LIMIT:
+            await message.answer(
+                f"❌ *Batas Listing Harian Tercapai!*\n\n"
+                f"Kamu sudah membuat *{daily_count}* listing hari ini.\n"
+                f"Batas maksimal: *{MARKET_DAILY_LIMIT}x per hari*.\n\n"
+                f"Coba lagi besok! 🕐",
+                parse_mode="Markdown"
+            )
+            await state.clear()
+            # Kembalikan ore yang mungkin sudah dikurangi (belum dikurangi, jadi aman)
+            return
+
     # Kurangi ore dari inventory
     removed = await remove_ore_from_inventory(message.from_user.id, data["ore_id"], qty)
     if not removed:
@@ -316,7 +342,8 @@ async def process_sell_price(message: Message, state: FSMContext):
         return
 
     # Buat listing
-    user = await get_user(message.from_user.id)
+    uid = message.from_user.id
+    user = await get_user(uid)
     username = message.from_user.username or ""
     fname = message.from_user.first_name or "Miner"
 
@@ -332,6 +359,10 @@ async def process_sell_price(message: Message, state: FSMContext):
     )
 
     await state.clear()
+
+    # Increment daily listing counter
+    if uid not in ADMIN_IDS:
+        await increment_market_daily_count(uid)
 
     # Achievement first market
     from game import _grant_if_new
