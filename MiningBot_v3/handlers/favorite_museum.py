@@ -236,3 +236,127 @@ async def cb_museum_view_photos(callback: CallbackQuery):
             reply_markup=back_main_kb(),
             parse_mode="Markdown"
         )
+
+
+# ══════════════════════════════════════════════════════════════
+# COMMAND /ores — Lihat semua ore per tier/rarity
+# ══════════════════════════════════════════════════════════════
+
+TIER_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythical", "cosmic", "divine"]
+
+TIER_DISPLAY = {
+    "common":    ("⚪", "COMMON"),
+    "uncommon":  ("🟢", "UNCOMMON"),
+    "rare":      ("🔵", "RARE"),
+    "epic":      ("🟣", "EPIC"),
+    "legendary": ("🟡", "LEGENDARY"),
+    "mythical":  ("🔴", "MYTHICAL"),
+    "cosmic":    ("🌌", "COSMIC"),
+    "divine":    ("✨", "DIVINE"),
+}
+
+
+def _group_ores_by_tier() -> dict:
+    grouped = {t: [] for t in TIER_ORDER}
+    for ore_id, ore in ORES.items():
+        tier = ore.get("tier", "common")
+        if tier in grouped:
+            grouped[tier].append((ore_id, ore))
+    return grouped
+
+
+@router.message(Command("ores"))
+@router.message(Command("orelist"))
+async def cmd_ores_list(message: Message):
+    """
+    /ores          — Daftar semua ore dikelompokkan per tier
+    /ores [tier]   — Filter satu tier saja, contoh: /ores epic
+    """
+    parts = message.text.split() if message.text else []
+    filter_tier = parts[1].lower() if len(parts) > 1 else None
+
+    grouped = _group_ores_by_tier()
+
+    # ── Filter satu tier ──────────────────────────────────────
+    if filter_tier:
+        # Cocokkan awalan, misal "leg" → "legendary"
+        matched = next((t for t in TIER_ORDER if t.startswith(filter_tier)), None)
+        if not matched:
+            valid = " | ".join(TIER_ORDER)
+            await message.answer(
+                f"❌ Tier `{filter_tier}` tidak dikenal.\n\n"
+                f"Tier yang tersedia:\n`{valid}`\n\n"
+                f"Contoh: `/ores rare` atau `/ores epic`",
+                parse_mode="Markdown"
+            )
+            return
+
+        ores_in = grouped[matched]
+        emoji, label = TIER_DISPLAY.get(matched, ("🪨", matched.upper()))
+        lines = [
+            f"{emoji} *{label}* — {len(ores_in)} ore",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+        for ore_id, ore in ores_in:
+            lines.append(f"{ore.get('emoji','')} *{ore.get('name', ore_id)}*  `[{ore_id}]`")
+            lines.append(f"     _{ore.get('desc','')}_")
+            lines.append("")
+
+        text = "\n".join(lines)
+        # Split jika terlalu panjang
+        if len(text) <= 4000:
+            await message.answer(text, parse_mode="Markdown")
+        else:
+            # Kirim per 20 ore
+            chunk_lines = lines[:3]
+            for line in lines[3:]:
+                chunk_lines.append(line)
+                if len("\n".join(chunk_lines)) > 3500:
+                    await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
+                    chunk_lines = []
+            if chunk_lines:
+                await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
+        return
+
+    # ── Tampilkan semua tier (ringkasan) ──────────────────────
+    total_ores = sum(len(v) for v in grouped.values())
+    lines = [
+        "📖 *DAFTAR ORE — Semua Tier*",
+        f"━━━━━━━━━━━━━━━━━━━━",
+        f"Total: *{total_ores} jenis ore*",
+        "",
+        "💡 Gunakan `/ores [tier]` untuk detail.",
+        "Contoh: `/ores common` · `/ores rare` · `/ores divine`",
+        "",
+    ]
+
+    for tier in TIER_ORDER:
+        ores_in = grouped.get(tier, [])
+        if not ores_in:
+            continue
+        emoji, label = TIER_DISPLAY.get(tier, ("🪨", tier.upper()))
+        # Nama-nama ore dipisah koma
+        names = ", ".join(
+            f"{o.get('emoji','')} {o.get('name', oid)}"
+            for oid, o in ores_in
+        )
+        lines.append(f"{emoji} *{label}* `({len(ores_in)})`")
+        lines.append(names)
+        lines.append("")
+
+    full = "\n".join(lines)
+    if len(full) <= 4000:
+        await message.answer(full, parse_mode="Markdown")
+    else:
+        # Kirim header dulu, lalu per tier
+        await message.answer("\n".join(lines[:7]), parse_mode="Markdown")
+        for tier in TIER_ORDER:
+            ores_in = grouped.get(tier, [])
+            if not ores_in:
+                continue
+            emoji, label = TIER_DISPLAY.get(tier, ("🪨", tier.upper()))
+            chunk = [f"{emoji} *{label}* `({len(ores_in)})`", ""]
+            for ore_id, ore in ores_in:
+                chunk.append(f"{ore.get('emoji','')} *{ore.get('name', ore_id)}*  `[{ore_id}]`")
+            await message.answer("\n".join(chunk), parse_mode="Markdown")
