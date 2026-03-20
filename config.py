@@ -27,11 +27,11 @@ async def get_all_admin_ids() -> list[int]:
 DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
 
 # FIX #9: Channel Telegram untuk notifikasi market
-MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env, contoh: -1001234567890
+MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "https://t.me/miningmarketsell")  # isi di .env, contoh: -1001234567890
 
 # Link channel & grup official (isi di .env)
-OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "")  # contoh: https://t.me/yourchannel
-OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "")    # contoh: https://t.me/yourgroup
+OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "https://t.me/miningholic")  # contoh: https://t.me/yourchannel
+OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "https://t.me/miningholiic")    # contoh: https://t.me/yourgroup
 
 
 STARTING_BALANCE        = 1000
