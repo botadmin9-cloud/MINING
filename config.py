@@ -5,15 +5,33 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8423250634:AAFY0bMwALbw3N7s-vwD4WAYujruhMSA44w")
 _raw_admins = os.getenv("ADMIN_IDS", "577381,7573097201")
-ADMIN_IDS: list[int] = [int(x.strip()) for x in _raw_admins.split(",") if x.strip().isdigit()]
+# Admin tetap dari .env
+STATIC_ADMIN_IDS: list[int] = [int(x.strip()) for x in _raw_admins.split(",") if x.strip().isdigit()]
+# ADMIN_IDS adalah alias (bisa diperluas runtime oleh get_all_admin_ids)
+ADMIN_IDS: list[int] = list(STATIC_ADMIN_IDS)
+
+async def get_all_admin_ids() -> list[int]:
+    """Gabungkan admin dari .env + admin dinamis dari DB."""
+    try:
+        from database import get_dynamic_admins
+        dynamic = await get_dynamic_admins()
+        dynamic_ids = [d["user_id"] for d in dynamic]
+        all_ids = list(set(STATIC_ADMIN_IDS + dynamic_ids))
+        # Update ADMIN_IDS global supaya is_admin() selalu up-to-date
+        global ADMIN_IDS
+        ADMIN_IDS.clear()
+        ADMIN_IDS.extend(all_ids)
+        return all_ids
+    except Exception:
+        return list(STATIC_ADMIN_IDS)
 DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
 
 # FIX #9: Channel Telegram untuk notifikasi market
-MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "@miningmarketsell")  # isi di .env, contoh: -1001234567890
+MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env, contoh: -1001234567890
 
 # Link channel & grup official (isi di .env)
-OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "@miningholic")  # contoh: https://t.me/yourchannel
-OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "@miningholiic")    # contoh: https://t.me/yourgroup
+OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "")  # contoh: https://t.me/yourchannel
+OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "")    # contoh: https://t.me/yourgroup
 
 
 STARTING_BALANCE        = 1000
@@ -23,18 +41,22 @@ ENERGY_REGEN_RATE       = 50       # energy per regen tick
 ENERGY_COOLDOWN_MINUTES = 2        # ✅ Lebih cepat: 5 menit (dari 10)
 MAX_ENERGY_BASE         = 500
 XP_BASE_MULTIPLIER      = 1
-KG_PRICE_MULTIPLIER     = 0.3
+KG_PRICE_MULTIPLIER     = 0.08   # ✅ Diturunkan: harga jual ore lebih murah
 
 # ── Bag System ────────────────────────────────────────────────
 BAG_SLOT_DEFAULT        = 50
 BAG_SLOT_MAX            = 500
 BAG_SLOT_STEP           = 10
-BAG_SLOT_BASE_COST      = 150000
+BAG_SLOT_BASE_COST      = 50000
+BAG_KG_DEFAULT          = 999999.0
+BAG_KG_MAX              = 999999.0
+BAG_KG_UPGRADE_STEP     = 50.0
+BAG_KG_UPGRADE_COST     = 10000
 
 # ── Energy Upgrade ────────────────────────────────────────────
 ENERGY_UPGRADE_MAX       = 5000
 ENERGY_UPGRADE_STEP      = 100
-ENERGY_UPGRADE_BASE_COST = 250000
+ENERGY_UPGRADE_BASE_COST = 150000
 LUCKY_CHANCE             = 0.05
 CRITICAL_CHANCE          = 0.10
 
@@ -44,10 +66,10 @@ VIP_ENERGY_REGEN_BONUS   = 2       # VIP: +2 energy per regen
 VIP_LUCK_BONUS           = 0.03    # VIP: +3% luck
 VIP_CRIT_BONUS           = 0.02    # VIP: +2% crit
 VIP_PRICES = {
-    "1_month":  {"label": "7 Hari",  "price": 15000,  "days": 7},
-    "3_months": {"label": "14 Hari",  "price": 30000,  "days": 14},
-    "6_months": {"label": "1 Bulan",  "price": 50000, "days": 30,
-    "lifetime": {"label": "3 Bulan", "price": 140000, "days": 90},
+    "1_month":  {"label": "1 Bulan",  "price": 40000,  "days": 30},
+    "3_months": {"label": "3 Bulan",  "price": 110000,  "days": 90},
+    "6_months": {"label": "6 Bulan",  "price": 200000, "days": 180},
+    "lifetime": {"label": "Lifetime", "price": 350000, "days": 36500},
 }
 VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
 TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
@@ -122,129 +144,129 @@ TOOLS: dict = {
 
 ORES: dict = {
     # COMMON
-    "pebble":           {"name":"🪨 Kerikil",            "emoji":"🪨","value":5,           "rarity":40.0,     "xp":3,         "kg_min":0.1,    "kg_max":500.0,    "desc":"Kerikil kecil. Ringan sekali.",                                  "tier":"common"},
-    "coal":             {"name":"⬛ Batu Bara",            "emoji":"⬛","value":10,          "rarity":30.0,     "xp":5,         "kg_min":0.5,    "kg_max":2000.0,   "desc":"Batu bara hitam, bahan bakar dasar.",                            "tier":"common"},
-    "stone":            {"name":"🗿 Batu Biasa",           "emoji":"🗿","value":15,          "rarity":20.0,     "xp":6,         "kg_min":1.0,    "kg_max":4000.0,   "desc":"Batu biasa. Melimpah di permukaan.",                             "tier":"common"},
-    "sandstone":        {"name":"🟫 Batu Pasir",           "emoji":"🟫","value":12,          "rarity":18.0,     "xp":5,         "kg_min":0.8,    "kg_max":3000.0,   "desc":"Batu pasir berpori, ringan.",                                    "tier":"common"},
-    "clay":             {"name":"🟤 Tanah Liat",           "emoji":"🟤","value":18,          "rarity":16.0,     "xp":7,         "kg_min":1.5,    "kg_max":5000.0,   "desc":"Tanah liat plastis, berguna untuk keramik.",                     "tier":"common"},
-    "gravel":           {"name":"⬜ Kerikil Kasar",         "emoji":"⬜","value":8,           "rarity":22.0,     "xp":4,         "kg_min":0.3,    "kg_max":1500.0,   "desc":"Kerikil besar-kasar.",                                           "tier":"common"},
-    "chalk":            {"name":"🤍 Kapur",                 "emoji":"🤍","value":12,          "rarity":15.0,     "xp":5,         "kg_min":0.5,    "kg_max":2500.0,   "desc":"Kapur lunak putih.",                                             "tier":"common"},
-    "mudstone":         {"name":"🟫 Batulumpur",            "emoji":"🟫","value":10,          "rarity":14.0,     "xp":4,         "kg_min":0.8,    "kg_max":3500.0,   "desc":"Batuan sedimen dari lumpur kuno.",                               "tier":"common"},
-    "basalt":           {"name":"⬛ Basal",                  "emoji":"⬛","value":20,          "rarity":12.0,     "xp":8,         "kg_min":2.0,    "kg_max":8000.0,   "desc":"Batu vulkanik padat dari lava kuno.",                            "tier":"common"},
-    "limestone":        {"name":"🟩 Batu Kapur",            "emoji":"🟩","value":15,          "rarity":13.0,     "xp":6,         "kg_min":1.5,    "kg_max":6000.0,   "desc":"Batu kapur dari dasar laut purba.",                              "tier":"common"},
-    "granite":          {"name":"🪨 Granit",                "emoji":"🪨","value":22,          "rarity":11.0,     "xp":8,         "kg_min":2.0,    "kg_max":10000.0,  "desc":"Batuan beku bertekstur kasar.",                                  "tier":"common"},
-    "obsidian_raw":     {"name":"🌑 Obsidian Kasar",        "emoji":"🌑","value":30,          "rarity":9.0,      "xp":10,        "kg_min":3.0,    "kg_max":12000.0,  "desc":"Kaca vulkanik dari lava yang mendingin.",                        "tier":"common"},
-    "flint":            {"name":"🔥 Batu Api",               "emoji":"🔥","value":25,          "rarity":10.0,     "xp":9,         "kg_min":1.0,    "kg_max":5000.0,   "desc":"Batu api keras, dapat mengeluarkan percikan.",                   "tier":"common"},
-    "pumice":           {"name":"🫧 Batu Apung",             "emoji":"🫧","value":18,          "rarity":11.5,     "xp":7,         "kg_min":0.2,    "kg_max":2000.0,   "desc":"Batu apung ringan dari letusan gunung berapi.",                  "tier":"common"},
-    "shale":            {"name":"🟤 Serpih",                 "emoji":"🟤","value":14,          "rarity":12.5,     "xp":5,         "kg_min":1.0,    "kg_max":4000.0,   "desc":"Batuan sedimen berlapis tipis.",                                 "tier":"common"},
+    "pebble":           {"name":"🪨 Kerikil",            "emoji":"🪨","value":5,           "rarity":40.0,     "xp":3,         "kg_min":0.03,    "kg_max":150.0,    "desc":"Kerikil kecil. Ringan sekali.",                                  "tier":"common"},
+    "coal":             {"name":"⬛ Batu Bara",            "emoji":"⬛","value":10,          "rarity":30.0,     "xp":5,         "kg_min":0.15,    "kg_max":600.0,   "desc":"Batu bara hitam, bahan bakar dasar.",                            "tier":"common"},
+    "stone":            {"name":"🗿 Batu Biasa",           "emoji":"🗿","value":15,          "rarity":20.0,     "xp":6,         "kg_min":0.3,    "kg_max":1200.0,   "desc":"Batu biasa. Melimpah di permukaan.",                             "tier":"common"},
+    "sandstone":        {"name":"🟫 Batu Pasir",           "emoji":"🟫","value":12,          "rarity":18.0,     "xp":5,         "kg_min":0.24,    "kg_max":900.0,   "desc":"Batu pasir berpori, ringan.",                                    "tier":"common"},
+    "clay":             {"name":"🟤 Tanah Liat",           "emoji":"🟤","value":18,          "rarity":16.0,     "xp":7,         "kg_min":0.45,    "kg_max":1500.0,   "desc":"Tanah liat plastis, berguna untuk keramik.",                     "tier":"common"},
+    "gravel":           {"name":"⬜ Kerikil Kasar",         "emoji":"⬜","value":8,           "rarity":22.0,     "xp":4,         "kg_min":0.09,    "kg_max":450.0,   "desc":"Kerikil besar-kasar.",                                           "tier":"common"},
+    "chalk":            {"name":"🤍 Kapur",                 "emoji":"🤍","value":12,          "rarity":15.0,     "xp":5,         "kg_min":0.15,    "kg_max":750.0,   "desc":"Kapur lunak putih.",                                             "tier":"common"},
+    "mudstone":         {"name":"🟫 Batulumpur",            "emoji":"🟫","value":10,          "rarity":14.0,     "xp":4,         "kg_min":0.24,    "kg_max":1050.0,   "desc":"Batuan sedimen dari lumpur kuno.",                               "tier":"common"},
+    "basalt":           {"name":"⬛ Basal",                  "emoji":"⬛","value":20,          "rarity":12.0,     "xp":8,         "kg_min":0.6,    "kg_max":2400.0,   "desc":"Batu vulkanik padat dari lava kuno.",                            "tier":"common"},
+    "limestone":        {"name":"🟩 Batu Kapur",            "emoji":"🟩","value":15,          "rarity":13.0,     "xp":6,         "kg_min":0.45,    "kg_max":1800.0,   "desc":"Batu kapur dari dasar laut purba.",                              "tier":"common"},
+    "granite":          {"name":"🪨 Granit",                "emoji":"🪨","value":22,          "rarity":11.0,     "xp":8,         "kg_min":0.6,    "kg_max":3000.0,  "desc":"Batuan beku bertekstur kasar.",                                  "tier":"common"},
+    "obsidian_raw":     {"name":"🌑 Obsidian Kasar",        "emoji":"🌑","value":30,          "rarity":9.0,      "xp":10,        "kg_min":0.9,    "kg_max":3600.0,  "desc":"Kaca vulkanik dari lava yang mendingin.",                        "tier":"common"},
+    "flint":            {"name":"🔥 Batu Api",               "emoji":"🔥","value":25,          "rarity":10.0,     "xp":9,         "kg_min":0.3,    "kg_max":1500.0,   "desc":"Batu api keras, dapat mengeluarkan percikan.",                   "tier":"common"},
+    "pumice":           {"name":"🫧 Batu Apung",             "emoji":"🫧","value":18,          "rarity":11.5,     "xp":7,         "kg_min":0.06,    "kg_max":600.0,   "desc":"Batu apung ringan dari letusan gunung berapi.",                  "tier":"common"},
+    "shale":            {"name":"🟤 Serpih",                 "emoji":"🟤","value":14,          "rarity":12.5,     "xp":5,         "kg_min":0.3,    "kg_max":1200.0,   "desc":"Batuan sedimen berlapis tipis.",                                 "tier":"common"},
     # UNCOMMON
-    "iron":             {"name":"⚙️ Bijih Besi",           "emoji":"⚙️","value":50,          "rarity":12.0,     "xp":15,        "kg_min":2.0,    "kg_max":6000.0,   "desc":"Bijih besi abu-abu, bahan dasar industri.",                     "tier":"uncommon"},
-    "copper":           {"name":"🟠 Bijih Tembaga",         "emoji":"🟠","value":80,          "rarity":10.0,     "xp":20,        "kg_min":2.5,    "kg_max":7000.0,   "desc":"Tembaga kemerahan, konduktor listrik.",                          "tier":"uncommon"},
-    "tin":              {"name":"🔘 Timah",                  "emoji":"🔘","value":60,          "rarity":9.0,      "xp":18,        "kg_min":2.0,    "kg_max":6500.0,   "desc":"Timah abu-abu kebiruan untuk paduan.",                           "tier":"uncommon"},
-    "lead":             {"name":"🔲 Timbal",                 "emoji":"🔲","value":55,          "rarity":8.5,      "xp":16,        "kg_min":3.0,    "kg_max":8000.0,   "desc":"Timbal sangat berat dan padat.",                                 "tier":"uncommon"},
-    "zinc":             {"name":"🔳 Seng",                   "emoji":"🔳","value":65,          "rarity":8.0,      "xp":19,        "kg_min":2.5,    "kg_max":7000.0,   "desc":"Seng putih kebiruan untuk galvanisasi.",                         "tier":"uncommon"},
-    "nickel":           {"name":"🔶 Nikel",                  "emoji":"🔶","value":90,          "rarity":7.5,      "xp":22,        "kg_min":2.5,    "kg_max":7500.0,   "desc":"Nikel silver-putih, tahan korosi.",                              "tier":"uncommon"},
-    "manganese":        {"name":"🟪 Mangan",                 "emoji":"🟪","value":100,         "rarity":7.0,      "xp":24,        "kg_min":3.0,    "kg_max":8000.0,   "desc":"Mangan keras, komponen baja kekuatan tinggi.",                   "tier":"uncommon"},
-    "chromite":         {"name":"⚫ Kromit",                  "emoji":"⚫","value":120,         "rarity":6.5,      "xp":27,        "kg_min":3.0,    "kg_max":9000.0,   "desc":"Bijih krom hitam, untuk baja tahan karat.",                     "tier":"uncommon"},
-    "sulfur":           {"name":"🟡 Belerang",               "emoji":"🟡","value":40,          "rarity":9.5,      "xp":13,        "kg_min":1.0,    "kg_max":4000.0,   "desc":"Belerang kuning dengan bau khas.",                               "tier":"uncommon"},
-    "bauxite":          {"name":"🔴 Bauksit",                "emoji":"🔴","value":60,          "rarity":8.0,      "xp":17,        "kg_min":2.0,    "kg_max":7000.0,   "desc":"Bijih aluminium utama di dunia.",                                "tier":"uncommon"},
-    "pyrite":           {"name":"✨ Pirit",                  "emoji":"✨","value":75,          "rarity":7.0,      "xp":21,        "kg_min":2.0,    "kg_max":6000.0,   "desc":"Pirit emas palsu, berkilau seperti emas.",                       "tier":"uncommon"},
-    "magnetite":        {"name":"🔮 Magnetit",               "emoji":"🔮","value":85,          "rarity":6.8,      "xp":23,        "kg_min":2.5,    "kg_max":7500.0,   "desc":"Bijih besi magnetik, menarik logam.",                            "tier":"uncommon"},
-    "galena":           {"name":"🩶 Galena",                 "emoji":"🩶","value":70,          "rarity":7.2,      "xp":20,        "kg_min":3.0,    "kg_max":8000.0,   "desc":"Bijih timbal utama dengan kilau logam.",                         "tier":"uncommon"},
-    "sphalerite":       {"name":"🟫 Sphalerit",              "emoji":"🟫","value":80,          "rarity":6.5,      "xp":22,        "kg_min":2.5,    "kg_max":7000.0,   "desc":"Bijih seng utama, hitam mengkilap.",                             "tier":"uncommon"},
-    "cinnabar":         {"name":"🔴 Sinnabari",              "emoji":"🔴","value":110,         "rarity":6.0,      "xp":26,        "kg_min":2.0,    "kg_max":6000.0,   "desc":"Bijih merkuri merah mencolok.",                                  "tier":"uncommon"},
+    "iron":             {"name":"⚙️ Bijih Besi",           "emoji":"⚙️","value":50,          "rarity":12.0,     "xp":15,        "kg_min":0.6,    "kg_max":1800.0,   "desc":"Bijih besi abu-abu, bahan dasar industri.",                     "tier":"uncommon"},
+    "copper":           {"name":"🟠 Bijih Tembaga",         "emoji":"🟠","value":80,          "rarity":10.0,     "xp":20,        "kg_min":0.75,    "kg_max":2100.0,   "desc":"Tembaga kemerahan, konduktor listrik.",                          "tier":"uncommon"},
+    "tin":              {"name":"🔘 Timah",                  "emoji":"🔘","value":60,          "rarity":9.0,      "xp":18,        "kg_min":0.6,    "kg_max":1950.0,   "desc":"Timah abu-abu kebiruan untuk paduan.",                           "tier":"uncommon"},
+    "lead":             {"name":"🔲 Timbal",                 "emoji":"🔲","value":55,          "rarity":8.5,      "xp":16,        "kg_min":0.9,    "kg_max":2400.0,   "desc":"Timbal sangat berat dan padat.",                                 "tier":"uncommon"},
+    "zinc":             {"name":"🔳 Seng",                   "emoji":"🔳","value":65,          "rarity":8.0,      "xp":19,        "kg_min":0.75,    "kg_max":2100.0,   "desc":"Seng putih kebiruan untuk galvanisasi.",                         "tier":"uncommon"},
+    "nickel":           {"name":"🔶 Nikel",                  "emoji":"🔶","value":90,          "rarity":7.5,      "xp":22,        "kg_min":0.75,    "kg_max":2250.0,   "desc":"Nikel silver-putih, tahan korosi.",                              "tier":"uncommon"},
+    "manganese":        {"name":"🟪 Mangan",                 "emoji":"🟪","value":100,         "rarity":7.0,      "xp":24,        "kg_min":0.9,    "kg_max":2400.0,   "desc":"Mangan keras, komponen baja kekuatan tinggi.",                   "tier":"uncommon"},
+    "chromite":         {"name":"⚫ Kromit",                  "emoji":"⚫","value":120,         "rarity":6.5,      "xp":27,        "kg_min":0.9,    "kg_max":2700.0,   "desc":"Bijih krom hitam, untuk baja tahan karat.",                     "tier":"uncommon"},
+    "sulfur":           {"name":"🟡 Belerang",               "emoji":"🟡","value":40,          "rarity":9.5,      "xp":13,        "kg_min":0.3,    "kg_max":1200.0,   "desc":"Belerang kuning dengan bau khas.",                               "tier":"uncommon"},
+    "bauxite":          {"name":"🔴 Bauksit",                "emoji":"🔴","value":60,          "rarity":8.0,      "xp":17,        "kg_min":0.6,    "kg_max":2100.0,   "desc":"Bijih aluminium utama di dunia.",                                "tier":"uncommon"},
+    "pyrite":           {"name":"✨ Pirit",                  "emoji":"✨","value":75,          "rarity":7.0,      "xp":21,        "kg_min":0.6,    "kg_max":1800.0,   "desc":"Pirit emas palsu, berkilau seperti emas.",                       "tier":"uncommon"},
+    "magnetite":        {"name":"🔮 Magnetit",               "emoji":"🔮","value":85,          "rarity":6.8,      "xp":23,        "kg_min":0.75,    "kg_max":2250.0,   "desc":"Bijih besi magnetik, menarik logam.",                            "tier":"uncommon"},
+    "galena":           {"name":"🩶 Galena",                 "emoji":"🩶","value":70,          "rarity":7.2,      "xp":20,        "kg_min":0.9,    "kg_max":2400.0,   "desc":"Bijih timbal utama dengan kilau logam.",                         "tier":"uncommon"},
+    "sphalerite":       {"name":"🟫 Sphalerit",              "emoji":"🟫","value":80,          "rarity":6.5,      "xp":22,        "kg_min":0.75,    "kg_max":2100.0,   "desc":"Bijih seng utama, hitam mengkilap.",                             "tier":"uncommon"},
+    "cinnabar":         {"name":"🔴 Sinnabari",              "emoji":"🔴","value":110,         "rarity":6.0,      "xp":26,        "kg_min":0.6,    "kg_max":1800.0,   "desc":"Bijih merkuri merah mencolok.",                                  "tier":"uncommon"},
     # RARE
-    "silver":           {"name":"⬜ Perak",                  "emoji":"⬜","value":300,         "rarity":6.0,      "xp":50,        "kg_min":3.0,    "kg_max":9000.0,   "desc":"Perak berkilau, lebih berharga dari tembaga.",                   "tier":"rare"},
-    "quartz":           {"name":"🔷 Kuarsa",                 "emoji":"🔷","value":250,         "rarity":5.0,      "xp":45,        "kg_min":2.0,    "kg_max":7000.0,   "desc":"Kristal kuarsa transparan.",                                     "tier":"rare"},
-    "gold":             {"name":"🟡 Emas Murni",             "emoji":"🟡","value":800,         "rarity":4.0,      "xp":100,       "kg_min":4.0,    "kg_max":12000.0,  "desc":"Emas murni berkilau.",                                           "tier":"rare"},
-    "platinum":         {"name":"🤍 Platinum",               "emoji":"🤍","value":1500,        "rarity":2.5,      "xp":160,       "kg_min":5.0,    "kg_max":15000.0,  "desc":"Platinum putih mewah, lebih langka dari emas.",                  "tier":"rare"},
-    "palladium":        {"name":"🩶 Palladium",              "emoji":"🩶","value":1200,        "rarity":3.0,      "xp":140,       "kg_min":4.5,    "kg_max":13000.0,  "desc":"Logam transisi langka, digunakan dalam katalis.",                "tier":"rare"},
-    "titanium_ore":     {"name":"🔵 Bijih Titanium",         "emoji":"🔵","value":1000,        "rarity":3.2,      "xp":130,       "kg_min":4.0,    "kg_max":12000.0,  "desc":"Titanium ringan namun sekuat baja.",                             "tier":"rare"},
-    "cobalt_ore":       {"name":"🫐 Bijih Kobalt",           "emoji":"🫐","value":1200,        "rarity":2.8,      "xp":145,       "kg_min":4.5,    "kg_max":13000.0,  "desc":"Kobalt biru tua, digunakan dalam baterai.",                      "tier":"rare"},
-    "tungsten":         {"name":"🩷 Tungsten",               "emoji":"🩷","value":1800,        "rarity":2.2,      "xp":180,       "kg_min":6.0,    "kg_max":18000.0,  "desc":"Tungsten titik lebur tertinggi dari semua logam.",               "tier":"rare"},
-    "malachite":        {"name":"💚 Malakit",                "emoji":"💚","value":600,         "rarity":4.5,      "xp":75,        "kg_min":2.5,    "kg_max":8000.0,   "desc":"Tembaga karbonat hijau zamrud yang indah.",                      "tier":"rare"},
-    "hematite":         {"name":"🩸 Hematit",                "emoji":"🩸","value":500,         "rarity":5.0,      "xp":60,        "kg_min":3.5,    "kg_max":10000.0,  "desc":"Bijih besi merah, digunakan sejak zaman batu.",                  "tier":"rare"},
-    "rhodium":          {"name":"🔘 Rhodium",                "emoji":"🔘","value":2000,        "rarity":2.0,      "xp":200,       "kg_min":5.0,    "kg_max":15000.0,  "desc":"Logam paling mahal di dunia per gramnya.",                       "tier":"rare"},
-    "iridium":          {"name":"⚫ Iridium",                 "emoji":"⚫","value":1700,        "rarity":2.3,      "xp":170,       "kg_min":5.0,    "kg_max":14000.0,  "desc":"Logam terkeras dari platinum group.",                            "tier":"rare"},
-    "osmium":           {"name":"🔵 Osmium",                  "emoji":"🔵","value":1600,        "rarity":2.4,      "xp":160,       "kg_min":6.0,    "kg_max":16000.0,  "desc":"Logam paling padat yang ada di bumi.",                           "tier":"rare"},
-    "ruthenium":        {"name":"🩶 Ruthenium",              "emoji":"🩶","value":1400,        "rarity":2.6,      "xp":150,       "kg_min":4.0,    "kg_max":12000.0,  "desc":"Logam keras dari platinum group.",                               "tier":"rare"},
-    "rhenium":          {"name":"🔷 Rhenium",                "emoji":"🔷","value":1900,        "rarity":1.8,      "xp":190,       "kg_min":5.0,    "kg_max":15000.0,  "desc":"Logam langka dengan titik lebur sangat tinggi.",                 "tier":"rare"},
+    "silver":           {"name":"⬜ Perak",                  "emoji":"⬜","value":300,         "rarity":6.0,      "xp":50,        "kg_min":0.9,    "kg_max":2700.0,   "desc":"Perak berkilau, lebih berharga dari tembaga.",                   "tier":"rare"},
+    "quartz":           {"name":"🔷 Kuarsa",                 "emoji":"🔷","value":250,         "rarity":5.0,      "xp":45,        "kg_min":0.6,    "kg_max":2100.0,   "desc":"Kristal kuarsa transparan.",                                     "tier":"rare"},
+    "gold":             {"name":"🟡 Emas Murni",             "emoji":"🟡","value":800,         "rarity":4.0,      "xp":100,       "kg_min":1.2,    "kg_max":3600.0,  "desc":"Emas murni berkilau.",                                           "tier":"rare"},
+    "platinum":         {"name":"🤍 Platinum",               "emoji":"🤍","value":1500,        "rarity":2.5,      "xp":160,       "kg_min":1.5,    "kg_max":4500.0,  "desc":"Platinum putih mewah, lebih langka dari emas.",                  "tier":"rare"},
+    "palladium":        {"name":"🩶 Palladium",              "emoji":"🩶","value":1200,        "rarity":3.0,      "xp":140,       "kg_min":1.35,    "kg_max":3900.0,  "desc":"Logam transisi langka, digunakan dalam katalis.",                "tier":"rare"},
+    "titanium_ore":     {"name":"🔵 Bijih Titanium",         "emoji":"🔵","value":1000,        "rarity":3.2,      "xp":130,       "kg_min":1.2,    "kg_max":3600.0,  "desc":"Titanium ringan namun sekuat baja.",                             "tier":"rare"},
+    "cobalt_ore":       {"name":"🫐 Bijih Kobalt",           "emoji":"🫐","value":1200,        "rarity":2.8,      "xp":145,       "kg_min":1.35,    "kg_max":3900.0,  "desc":"Kobalt biru tua, digunakan dalam baterai.",                      "tier":"rare"},
+    "tungsten":         {"name":"🩷 Tungsten",               "emoji":"🩷","value":1800,        "rarity":2.2,      "xp":180,       "kg_min":1.8,    "kg_max":5400.0,  "desc":"Tungsten titik lebur tertinggi dari semua logam.",               "tier":"rare"},
+    "malachite":        {"name":"💚 Malakit",                "emoji":"💚","value":600,         "rarity":4.5,      "xp":75,        "kg_min":0.75,    "kg_max":2400.0,   "desc":"Tembaga karbonat hijau zamrud yang indah.",                      "tier":"rare"},
+    "hematite":         {"name":"🩸 Hematit",                "emoji":"🩸","value":500,         "rarity":5.0,      "xp":60,        "kg_min":1.05,    "kg_max":3000.0,  "desc":"Bijih besi merah, digunakan sejak zaman batu.",                  "tier":"rare"},
+    "rhodium":          {"name":"🔘 Rhodium",                "emoji":"🔘","value":2000,        "rarity":2.0,      "xp":200,       "kg_min":1.5,    "kg_max":4500.0,  "desc":"Logam paling mahal di dunia per gramnya.",                       "tier":"rare"},
+    "iridium":          {"name":"⚫ Iridium",                 "emoji":"⚫","value":1700,        "rarity":2.3,      "xp":170,       "kg_min":1.5,    "kg_max":4200.0,  "desc":"Logam terkeras dari platinum group.",                            "tier":"rare"},
+    "osmium":           {"name":"🔵 Osmium",                  "emoji":"🔵","value":1600,        "rarity":2.4,      "xp":160,       "kg_min":1.8,    "kg_max":4800.0,  "desc":"Logam paling padat yang ada di bumi.",                           "tier":"rare"},
+    "ruthenium":        {"name":"🩶 Ruthenium",              "emoji":"🩶","value":1400,        "rarity":2.6,      "xp":150,       "kg_min":1.2,    "kg_max":3600.0,  "desc":"Logam keras dari platinum group.",                               "tier":"rare"},
+    "rhenium":          {"name":"🔷 Rhenium",                "emoji":"🔷","value":1900,        "rarity":1.8,      "xp":190,       "kg_min":1.5,    "kg_max":4500.0,  "desc":"Logam langka dengan titik lebur sangat tinggi.",                 "tier":"rare"},
     # EPIC
-    "sapphire":         {"name":"🔵 Safir",                  "emoji":"🔵","value":3000,        "rarity":2.0,      "xp":300,       "kg_min":1.0,    "kg_max":5000.0,   "desc":"Batu mulia biru langit yang menawan.",                           "tier":"epic"},
-    "emerald":          {"name":"💚 Zamrud",                  "emoji":"💚","value":5000,        "rarity":1.5,      "xp":500,       "kg_min":1.5,    "kg_max":6000.0,   "desc":"Zamrud hijau yang memikat. Nilai tinggi!",                       "tier":"epic"},
-    "ruby":             {"name":"❤️ Rubi",                    "emoji":"❤️","value":10000,       "rarity":1.0,      "xp":800,       "kg_min":2.0,    "kg_max":7000.0,   "desc":"Rubi merah membara, batu mulia paling berharga.",                "tier":"epic"},
-    "topaz":            {"name":"🔶 Topaz",                  "emoji":"🔶","value":7500,        "rarity":1.2,      "xp":600,       "kg_min":1.5,    "kg_max":5500.0,   "desc":"Topaz kuning oranye yang indah.",                                "tier":"epic"},
-    "tanzanite":        {"name":"💙 Tanzanit",               "emoji":"💙","value":12000,       "rarity":0.8,      "xp":1000,      "kg_min":2.0,    "kg_max":8000.0,   "desc":"Batu biru-ungu langka dari Afrika Timur.",                       "tier":"epic"},
-    "garnet":           {"name":"🟥 Garnet",                 "emoji":"🟥","value":9000,        "rarity":1.1,      "xp":700,       "kg_min":1.8,    "kg_max":6500.0,   "desc":"Garnet merah tua berkilau indah.",                               "tier":"epic"},
-    "aquamarine":       {"name":"🩵 Aquamarin",              "emoji":"🩵","value":11000,       "rarity":0.9,      "xp":900,       "kg_min":1.5,    "kg_max":6000.0,   "desc":"Batu laut biru kehijauan kristal bening.",                       "tier":"epic"},
-    "tourmaline":       {"name":"🌈 Turmalin",               "emoji":"🌈","value":14000,       "rarity":0.75,     "xp":1100,      "kg_min":2.0,    "kg_max":7500.0,   "desc":"Turmalin multi-warna, batu paling berwarna-warni.",              "tier":"epic"},
-    "spinel":           {"name":"🟣 Spinel",                 "emoji":"🟣","value":16000,       "rarity":0.65,     "xp":1300,      "kg_min":1.5,    "kg_max":6500.0,   "desc":"Spinel merah-ungu, sering salah disebut rubi.",                  "tier":"epic"},
-    "zircon":           {"name":"🔸 Zirkon",                 "emoji":"🔸","value":10000,       "rarity":0.95,     "xp":800,       "kg_min":1.5,    "kg_max":5500.0,   "desc":"Zirkon berkilau amat terang seperti berlian.",                   "tier":"epic"},
-    "peridot":          {"name":"🍏 Peridot",                "emoji":"🍏","value":8000,        "rarity":1.15,     "xp":650,       "kg_min":1.3,    "kg_max":5000.0,   "desc":"Peridot hijau-kuning dari mantel bumi.",                         "tier":"epic"},
-    "iolite":           {"name":"💜 Iolit",                  "emoji":"💜","value":13000,       "rarity":0.85,     "xp":950,       "kg_min":1.8,    "kg_max":7000.0,   "desc":"Batu biru-ungu, kompas Viking kuno.",                            "tier":"epic"},
-    "alexandrite_jr":   {"name":"🟣 Mini Alexandrit",        "emoji":"🟣","value":15000,       "rarity":0.70,     "xp":1200,      "kg_min":1.0,    "kg_max":5000.0,   "desc":"Versi kecil alexandrit, masih berubah warna.",                   "tier":"epic"},
-    "chrysoberyl":      {"name":"🟡 Krisoberil",             "emoji":"🟡","value":11500,       "rarity":0.88,     "xp":870,       "kg_min":1.5,    "kg_max":6000.0,   "desc":"Kuning kehijauan, cat's eye effect.",                            "tier":"epic"},
-    "sunstone":         {"name":"🌟 Batu Matahari",          "emoji":"🌟","value":9500,        "rarity":1.05,     "xp":750,       "kg_min":1.5,    "kg_max":5500.0,   "desc":"Batu yang berkilau seperti matahari.",                           "tier":"epic"},
+    "sapphire":         {"name":"🔵 Safir",                  "emoji":"🔵","value":3000,        "rarity":2.0,      "xp":300,       "kg_min":0.3,    "kg_max":1500.0,   "desc":"Batu mulia biru langit yang menawan.",                           "tier":"epic"},
+    "emerald":          {"name":"💚 Zamrud",                  "emoji":"💚","value":5000,        "rarity":1.5,      "xp":500,       "kg_min":0.45,    "kg_max":1800.0,   "desc":"Zamrud hijau yang memikat. Nilai tinggi!",                       "tier":"epic"},
+    "ruby":             {"name":"❤️ Rubi",                    "emoji":"❤️","value":10000,       "rarity":1.0,      "xp":800,       "kg_min":0.6,    "kg_max":2100.0,   "desc":"Rubi merah membara, batu mulia paling berharga.",                "tier":"epic"},
+    "topaz":            {"name":"🔶 Topaz",                  "emoji":"🔶","value":7500,        "rarity":1.2,      "xp":600,       "kg_min":0.45,    "kg_max":1650.0,   "desc":"Topaz kuning oranye yang indah.",                                "tier":"epic"},
+    "tanzanite":        {"name":"💙 Tanzanit",               "emoji":"💙","value":12000,       "rarity":0.8,      "xp":1000,      "kg_min":0.6,    "kg_max":2400.0,   "desc":"Batu biru-ungu langka dari Afrika Timur.",                       "tier":"epic"},
+    "garnet":           {"name":"🟥 Garnet",                 "emoji":"🟥","value":9000,        "rarity":1.1,      "xp":700,       "kg_min":0.54,    "kg_max":1950.0,   "desc":"Garnet merah tua berkilau indah.",                               "tier":"epic"},
+    "aquamarine":       {"name":"🩵 Aquamarin",              "emoji":"🩵","value":11000,       "rarity":0.9,      "xp":900,       "kg_min":0.45,    "kg_max":1800.0,   "desc":"Batu laut biru kehijauan kristal bening.",                       "tier":"epic"},
+    "tourmaline":       {"name":"🌈 Turmalin",               "emoji":"🌈","value":14000,       "rarity":0.75,     "xp":1100,      "kg_min":0.6,    "kg_max":2250.0,   "desc":"Turmalin multi-warna, batu paling berwarna-warni.",              "tier":"epic"},
+    "spinel":           {"name":"🟣 Spinel",                 "emoji":"🟣","value":16000,       "rarity":0.65,     "xp":1300,      "kg_min":0.45,    "kg_max":1950.0,   "desc":"Spinel merah-ungu, sering salah disebut rubi.",                  "tier":"epic"},
+    "zircon":           {"name":"🔸 Zirkon",                 "emoji":"🔸","value":10000,       "rarity":0.95,     "xp":800,       "kg_min":0.45,    "kg_max":1650.0,   "desc":"Zirkon berkilau amat terang seperti berlian.",                   "tier":"epic"},
+    "peridot":          {"name":"🍏 Peridot",                "emoji":"🍏","value":8000,        "rarity":1.15,     "xp":650,       "kg_min":0.39,    "kg_max":1500.0,   "desc":"Peridot hijau-kuning dari mantel bumi.",                         "tier":"epic"},
+    "iolite":           {"name":"💜 Iolit",                  "emoji":"💜","value":13000,       "rarity":0.85,     "xp":950,       "kg_min":0.54,    "kg_max":2100.0,   "desc":"Batu biru-ungu, kompas Viking kuno.",                            "tier":"epic"},
+    "alexandrite_jr":   {"name":"🟣 Mini Alexandrit",        "emoji":"🟣","value":15000,       "rarity":0.70,     "xp":1200,      "kg_min":0.3,    "kg_max":1500.0,   "desc":"Versi kecil alexandrit, masih berubah warna.",                   "tier":"epic"},
+    "chrysoberyl":      {"name":"🟡 Krisoberil",             "emoji":"🟡","value":11500,       "rarity":0.88,     "xp":870,       "kg_min":0.45,    "kg_max":1800.0,   "desc":"Kuning kehijauan, cat's eye effect.",                            "tier":"epic"},
+    "sunstone":         {"name":"🌟 Batu Matahari",          "emoji":"🌟","value":9500,        "rarity":1.05,     "xp":750,       "kg_min":0.45,    "kg_max":1650.0,   "desc":"Batu yang berkilau seperti matahari.",                           "tier":"epic"},
     # LEGENDARY
-    "diamond":          {"name":"💎 Berlian",                "emoji":"💎","value":25000,       "rarity":0.5,      "xp":2000,      "kg_min":0.5,    "kg_max":3000.0,   "desc":"Berlian murni, mineral terkeras di bumi!",                       "tier":"legendary"},
-    "amethyst":         {"name":"💜 Ametis",                 "emoji":"💜","value":40000,       "rarity":0.3,      "xp":3000,      "kg_min":1.0,    "kg_max":4000.0,   "desc":"Ametis ungu misterius, batu para penyihir.",                     "tier":"legendary"},
-    "opal":             {"name":"🌈 Opal Pelangi",           "emoji":"🌈","value":75000,       "rarity":0.18,     "xp":5000,      "kg_min":0.8,    "kg_max":3500.0,   "desc":"Opal memantulkan semua warna pelangi. Eksotis!",                 "tier":"legendary"},
-    "mythril":          {"name":"🔮 Mithril",                "emoji":"🔮","value":125000,      "rarity":0.10,     "xp":8000,      "kg_min":3.0,    "kg_max":10000.0,  "desc":"Logam mithril dari legenda kuno.",                               "tier":"legendary"},
-    "alexandrite":      {"name":"🟢 Alexandrit",             "emoji":"🟢","value":150000,      "rarity":0.08,     "xp":9000,      "kg_min":0.5,    "kg_max":2500.0,   "desc":"Batu ajaib berubah warna di cahaya berbeda.",                    "tier":"legendary"},
-    "painite":          {"name":"🔴 Painit",                 "emoji":"🔴","value":200000,      "rarity":0.06,     "xp":12000,     "kg_min":0.3,    "kg_max":2000.0,   "desc":"Salah satu mineral paling langka di bumi.",                      "tier":"legendary"},
-    "benitoite":        {"name":"💠 Benitoit",               "emoji":"💠","value":225000,      "rarity":0.05,     "xp":14000,     "kg_min":0.2,    "kg_max":1500.0,   "desc":"Safir biru fluoresen langka dari California.",                   "tier":"legendary"},
-    "jadeite":          {"name":"🟩 Jadeite",                "emoji":"🟩","value":175000,      "rarity":0.07,     "xp":11000,     "kg_min":1.0,    "kg_max":5000.0,   "desc":"Giok kualitas tertinggi, lebih berharga dari emas.",             "tier":"legendary"},
-    "larimar":          {"name":"🩵 Larimar",                "emoji":"🩵","value":140000,      "rarity":0.09,     "xp":8500,      "kg_min":0.5,    "kg_max":3000.0,   "desc":"Batu laut biru-putih langka dari Dominika.",                     "tier":"legendary"},
-    "musgravite":       {"name":"🟤 Musgravit",              "emoji":"🟤","value":275000,      "rarity":0.04,     "xp":16000,     "kg_min":0.1,    "kg_max":1000.0,   "desc":"Batu mulia sangat langka dari Australia.",                       "tier":"legendary"},
-    "red_beryl":        {"name":"🔴 Beril Merah",            "emoji":"🔴","value":185000,      "rarity":0.065,    "xp":11500,     "kg_min":0.3,    "kg_max":2000.0,   "desc":"Beril merah rubi, lebih langka dari berlian.",                   "tier":"legendary"},
-    "grandidierite":    {"name":"🟦 Grandidierit",           "emoji":"🟦","value":195000,      "rarity":0.062,    "xp":12500,     "kg_min":0.5,    "kg_max":2500.0,   "desc":"Batu biru-hijau langka dari Madagascar.",                        "tier":"legendary"},
-    "serendibite":      {"name":"🟫 Serendibit",             "emoji":"🟫","value":210000,      "rarity":0.055,    "xp":13000,     "kg_min":0.2,    "kg_max":1500.0,   "desc":"Mineral langka mengandung boron.",                                "tier":"legendary"},
-    "poudretteite":     {"name":"🩷 Poudrétteite",           "emoji":"🩷","value":240000,      "rarity":0.045,    "xp":15000,     "kg_min":0.1,    "kg_max":1000.0,   "desc":"Mineral kristal merah muda ultra langka.",                       "tier":"legendary"},
+    "diamond":          {"name":"💎 Berlian",                "emoji":"💎","value":25000,       "rarity":0.5,      "xp":2000,      "kg_min":0.15,    "kg_max":900.0,   "desc":"Berlian murni, mineral terkeras di bumi!",                       "tier":"legendary"},
+    "amethyst":         {"name":"💜 Ametis",                 "emoji":"💜","value":40000,       "rarity":0.3,      "xp":3000,      "kg_min":0.3,    "kg_max":1200.0,   "desc":"Ametis ungu misterius, batu para penyihir.",                     "tier":"legendary"},
+    "opal":             {"name":"🌈 Opal Pelangi",           "emoji":"🌈","value":75000,       "rarity":0.18,     "xp":5000,      "kg_min":0.24,    "kg_max":1050.0,   "desc":"Opal memantulkan semua warna pelangi. Eksotis!",                 "tier":"legendary"},
+    "mythril":          {"name":"🔮 Mithril",                "emoji":"🔮","value":125000,      "rarity":0.10,     "xp":8000,      "kg_min":0.9,    "kg_max":3000.0,  "desc":"Logam mithril dari legenda kuno.",                               "tier":"legendary"},
+    "alexandrite":      {"name":"🟢 Alexandrit",             "emoji":"🟢","value":150000,      "rarity":0.08,     "xp":9000,      "kg_min":0.15,    "kg_max":750.0,   "desc":"Batu ajaib berubah warna di cahaya berbeda.",                    "tier":"legendary"},
+    "painite":          {"name":"🔴 Painit",                 "emoji":"🔴","value":200000,      "rarity":0.06,     "xp":12000,     "kg_min":0.09,    "kg_max":600.0,   "desc":"Salah satu mineral paling langka di bumi.",                      "tier":"legendary"},
+    "benitoite":        {"name":"💠 Benitoit",               "emoji":"💠","value":225000,      "rarity":0.05,     "xp":14000,     "kg_min":0.06,    "kg_max":450.0,   "desc":"Safir biru fluoresen langka dari California.",                   "tier":"legendary"},
+    "jadeite":          {"name":"🟩 Jadeite",                "emoji":"🟩","value":175000,      "rarity":0.07,     "xp":11000,     "kg_min":0.3,    "kg_max":1500.0,   "desc":"Giok kualitas tertinggi, lebih berharga dari emas.",             "tier":"legendary"},
+    "larimar":          {"name":"🩵 Larimar",                "emoji":"🩵","value":140000,      "rarity":0.09,     "xp":8500,      "kg_min":0.15,    "kg_max":900.0,   "desc":"Batu laut biru-putih langka dari Dominika.",                     "tier":"legendary"},
+    "musgravite":       {"name":"🟤 Musgravit",              "emoji":"🟤","value":275000,      "rarity":0.04,     "xp":16000,     "kg_min":0.03,    "kg_max":300.0,   "desc":"Batu mulia sangat langka dari Australia.",                       "tier":"legendary"},
+    "red_beryl":        {"name":"🔴 Beril Merah",            "emoji":"🔴","value":185000,      "rarity":0.065,    "xp":11500,     "kg_min":0.09,    "kg_max":600.0,   "desc":"Beril merah rubi, lebih langka dari berlian.",                   "tier":"legendary"},
+    "grandidierite":    {"name":"🟦 Grandidierit",           "emoji":"🟦","value":195000,      "rarity":0.062,    "xp":12500,     "kg_min":0.15,    "kg_max":750.0,   "desc":"Batu biru-hijau langka dari Madagascar.",                        "tier":"legendary"},
+    "serendibite":      {"name":"🟫 Serendibit",             "emoji":"🟫","value":210000,      "rarity":0.055,    "xp":13000,     "kg_min":0.06,    "kg_max":450.0,   "desc":"Mineral langka mengandung boron.",                                "tier":"legendary"},
+    "poudretteite":     {"name":"🩷 Poudrétteite",           "emoji":"🩷","value":240000,      "rarity":0.045,    "xp":15000,     "kg_min":0.03,    "kg_max":300.0,   "desc":"Mineral kristal merah muda ultra langka.",                       "tier":"legendary"},
     # MYTHICAL
-    "dragonstone":      {"name":"🐉 Batu Naga",              "emoji":"🐉","value":400000,      "rarity":0.04,     "xp":20000,     "kg_min":5.0,    "kg_max":50000.0,  "desc":"Batu mengandung jiwa naga purba. Ultra langka!",                 "tier":"mythical"},
-    "stardust":         {"name":"✨ Debu Bintang",            "emoji":"✨","value":900000,      "rarity":0.012,    "xp":40000,     "kg_min":0.1,    "kg_max":1000.0,   "desc":"Debu dari bintang jatuh. Bersinar di kegelapan.",                "tier":"mythical"},
-    "phoenix_ash":      {"name":"🔥 Abu Phoenix",            "emoji":"🔥","value":1250000,     "rarity":0.009,    "xp":55000,     "kg_min":0.2,    "kg_max":2000.0,   "desc":"Abu phoenix yang terlahir kembali.",                             "tier":"mythical"},
-    "lunar_crystal":    {"name":"🌙 Kristal Bulan",          "emoji":"🌙","value":1750000,     "rarity":0.007,    "xp":70000,     "kg_min":1.0,    "kg_max":5000.0,   "desc":"Kristal cahaya bulan purnama 1000 tahun.",                       "tier":"mythical"},
-    "void_shard":       {"name":"🌑 Void Shard",             "emoji":"🌑","value":2500000,     "rarity":0.005,    "xp":100000,    "kg_min":0.5,    "kg_max":4000.0,   "desc":"Pecahan dari dimensi kekosongan.",                               "tier":"mythical"},
-    "dragon_heart":     {"name":"💗 Jantung Naga",           "emoji":"💗","value":3500000,     "rarity":0.004,    "xp":140000,    "kg_min":2.0,    "kg_max":10000.0,  "desc":"Jantung naga purba masih berdenyut.",                            "tier":"mythical"},
-    "leviathan_scale":  {"name":"🐍 Sisik Leviathan",        "emoji":"🐍","value":4500000,     "rarity":0.003,    "xp":180000,    "kg_min":3.0,    "kg_max":15000.0,  "desc":"Sisik makhluk laut raksasa dari zaman prasejarah.",              "tier":"mythical"},
-    "thunder_stone":    {"name":"⚡ Batu Petir",              "emoji":"⚡","value":3000000,     "rarity":0.0045,   "xp":120000,    "kg_min":1.0,    "kg_max":6000.0,   "desc":"Batu yang terbentuk dari sambaran petir jutaan tahun.",          "tier":"mythical"},
-    "glacial_shard":    {"name":"🧊 Serpihan Glacial",       "emoji":"🧊","value":2250000,     "rarity":0.006,    "xp":90000,     "kg_min":0.5,    "kg_max":5000.0,   "desc":"Kristal es dari zaman es 100.000 tahun lalu.",                   "tier":"mythical"},
-    "cursed_gem":       {"name":"👁️ Batu Terkutuk",          "emoji":"👁️","value":6000000,    "rarity":0.002,    "xp":250000,    "kg_min":0.5,    "kg_max":3000.0,   "desc":"Batu berisi kutukan kuno.",                                      "tier":"mythical"},
-    "phoenix_feather":  {"name":"🦅 Bulu Phoenix",           "emoji":"🦅","value":5000000,     "rarity":0.0025,   "xp":200000,    "kg_min":0.1,    "kg_max":1000.0,   "desc":"Bulu phoenix legendaris yang tidak terbakar.",                   "tier":"mythical"},
-    "unicorn_horn":     {"name":"🦄 Tanduk Unicorn",         "emoji":"🦄","value":5500000,     "rarity":0.002,    "xp":220000,    "kg_min":0.5,    "kg_max":3000.0,   "desc":"Tanduk unicorn murni, penuh keajaiban.",                         "tier":"mythical"},
-    "kraken_tentacle":  {"name":"🐙 Tentakel Kraken",        "emoji":"🐙","value":4000000,     "rarity":0.003,    "xp":160000,    "kg_min":5.0,    "kg_max":20000.0,  "desc":"Tentakel kraken raksasa, masih bergerak.",                       "tier":"mythical"},
-    "basilisk_eye":     {"name":"🐍 Mata Basilisk",          "emoji":"🐍","value":7000000,     "rarity":0.0015,   "xp":280000,    "kg_min":0.3,    "kg_max":2000.0,   "desc":"Mata basilisk yang dapat mematikan.",                            "tier":"mythical"},
-    "ancient_fossil":   {"name":"🦕 Fosil Kuno",             "emoji":"🦕","value":3200000,     "rarity":0.0038,   "xp":130000,    "kg_min":10.0,   "kg_max":50000.0,  "desc":"Fosil makhluk prasejarah jutaan tahun.",                         "tier":"mythical"},
+    "dragonstone":      {"name":"🐉 Batu Naga",              "emoji":"🐉","value":400000,      "rarity":0.04,     "xp":20000,     "kg_min":1.5,    "kg_max":15000.0,  "desc":"Batu mengandung jiwa naga purba. Ultra langka!",                 "tier":"mythical"},
+    "stardust":         {"name":"✨ Debu Bintang",            "emoji":"✨","value":900000,      "rarity":0.012,    "xp":40000,     "kg_min":0.03,    "kg_max":300.0,   "desc":"Debu dari bintang jatuh. Bersinar di kegelapan.",                "tier":"mythical"},
+    "phoenix_ash":      {"name":"🔥 Abu Phoenix",            "emoji":"🔥","value":1250000,     "rarity":0.009,    "xp":55000,     "kg_min":0.06,    "kg_max":600.0,   "desc":"Abu phoenix yang terlahir kembali.",                             "tier":"mythical"},
+    "lunar_crystal":    {"name":"🌙 Kristal Bulan",          "emoji":"🌙","value":1750000,     "rarity":0.007,    "xp":70000,     "kg_min":0.3,    "kg_max":1500.0,   "desc":"Kristal cahaya bulan purnama 1000 tahun.",                       "tier":"mythical"},
+    "void_shard":       {"name":"🌑 Void Shard",             "emoji":"🌑","value":2500000,     "rarity":0.005,    "xp":100000,    "kg_min":0.15,    "kg_max":1200.0,   "desc":"Pecahan dari dimensi kekosongan.",                               "tier":"mythical"},
+    "dragon_heart":     {"name":"💗 Jantung Naga",           "emoji":"💗","value":3500000,     "rarity":0.004,    "xp":140000,    "kg_min":0.6,    "kg_max":3000.0,  "desc":"Jantung naga purba masih berdenyut.",                            "tier":"mythical"},
+    "leviathan_scale":  {"name":"🐍 Sisik Leviathan",        "emoji":"🐍","value":4500000,     "rarity":0.003,    "xp":180000,    "kg_min":0.9,    "kg_max":4500.0,  "desc":"Sisik makhluk laut raksasa dari zaman prasejarah.",              "tier":"mythical"},
+    "thunder_stone":    {"name":"⚡ Batu Petir",              "emoji":"⚡","value":3000000,     "rarity":0.0045,   "xp":120000,    "kg_min":0.3,    "kg_max":1800.0,   "desc":"Batu yang terbentuk dari sambaran petir jutaan tahun.",          "tier":"mythical"},
+    "glacial_shard":    {"name":"🧊 Serpihan Glacial",       "emoji":"🧊","value":2250000,     "rarity":0.006,    "xp":90000,     "kg_min":0.15,    "kg_max":1500.0,   "desc":"Kristal es dari zaman es 100.000 tahun lalu.",                   "tier":"mythical"},
+    "cursed_gem":       {"name":"👁️ Batu Terkutuk",          "emoji":"👁️","value":6000000,    "rarity":0.002,    "xp":250000,    "kg_min":0.15,    "kg_max":900.0,   "desc":"Batu berisi kutukan kuno.",                                      "tier":"mythical"},
+    "phoenix_feather":  {"name":"🦅 Bulu Phoenix",           "emoji":"🦅","value":5000000,     "rarity":0.0025,   "xp":200000,    "kg_min":0.03,    "kg_max":300.0,   "desc":"Bulu phoenix legendaris yang tidak terbakar.",                   "tier":"mythical"},
+    "unicorn_horn":     {"name":"🦄 Tanduk Unicorn",         "emoji":"🦄","value":5500000,     "rarity":0.002,    "xp":220000,    "kg_min":0.15,    "kg_max":900.0,   "desc":"Tanduk unicorn murni, penuh keajaiban.",                         "tier":"mythical"},
+    "kraken_tentacle":  {"name":"🐙 Tentakel Kraken",        "emoji":"🐙","value":4000000,     "rarity":0.003,    "xp":160000,    "kg_min":1.5,    "kg_max":6000.0,  "desc":"Tentakel kraken raksasa, masih bergerak.",                       "tier":"mythical"},
+    "basilisk_eye":     {"name":"🐍 Mata Basilisk",          "emoji":"🐍","value":7000000,     "rarity":0.0015,   "xp":280000,    "kg_min":0.09,    "kg_max":600.0,   "desc":"Mata basilisk yang dapat mematikan.",                            "tier":"mythical"},
+    "ancient_fossil":   {"name":"🦕 Fosil Kuno",             "emoji":"🦕","value":3200000,     "rarity":0.0038,   "xp":130000,    "kg_min":3.0,   "kg_max":15000.0,  "desc":"Fosil makhluk prasejarah jutaan tahun.",                         "tier":"mythical"},
     # COSMIC
-    "cosmic_dust":      {"name":"🌠 Debu Kosmik",            "emoji":"🌠","value":5000000,     "rarity":0.003,    "xp":200000,    "kg_min":0.05,   "kg_max":500.0,    "desc":"Debu dari tepi galaksi. Hampir mustahil ditemukan!",             "tier":"cosmic"},
-    "nebula_ore":       {"name":"🌌 Bijih Nebula",            "emoji":"🌌","value":12500000,    "rarity":0.001,    "xp":400000,    "kg_min":2.0,    "kg_max":8000.0,   "desc":"Bijih dari awan nebula antarbintang.",                           "tier":"cosmic"},
-    "time_crystal":     {"name":"⏳ Kristal Waktu",           "emoji":"⏳","value":30000000,    "rarity":0.0005,   "xp":1000000,   "kg_min":0.3,    "kg_max":2000.0,   "desc":"Kristal mengandung energi waktu.",                               "tier":"cosmic"},
-    "dark_energy_ore":  {"name":"🫥 Materi Gelap",           "emoji":"🫥","value":40000000,    "rarity":0.0003,   "xp":1500000,   "kg_min":0.1,    "kg_max":1500.0,   "desc":"Materi gelap yang nyaris tidak terdeteksi.",                     "tier":"cosmic"},
-    "pulsar_fragment":  {"name":"💫 Serpihan Pulsar",         "emoji":"💫","value":20000000,    "rarity":0.0008,   "xp":700000,    "kg_min":0.5,    "kg_max":3000.0,   "desc":"Serpihan bintang pulsar yang berputar 700x/detik.",              "tier":"cosmic"},
-    "quasar_crystal":   {"name":"🔆 Kristal Quasar",         "emoji":"🔆","value":25000000,    "rarity":0.0006,   "xp":900000,    "kg_min":0.2,    "kg_max":2500.0,   "desc":"Kristal dari pusat quasar paling terang.",                       "tier":"cosmic"},
-    "antimatter_shard": {"name":"💥 Serpihan Antimateri",    "emoji":"💥","value":50000000,    "rarity":0.0002,   "xp":2000000,   "kg_min":0.01,   "kg_max":500.0,    "desc":"Secuil antimateri — kontak dengan materi = ledakan.",            "tier":"cosmic"},
-    "neutron_core":     {"name":"⚪ Inti Neutron",            "emoji":"⚪","value":60000000,    "rarity":0.00015,  "xp":2500000,   "kg_min":5.0,    "kg_max":50000.0,  "desc":"Inti bintang neutron — lebih padat dari timbal.",                "tier":"cosmic"},
-    "singularity_ore":  {"name":"🌀 Bijih Singularitas",     "emoji":"🌀","value":100000000,   "rarity":0.0001,   "xp":4000000,   "kg_min":0.001,  "kg_max":100.0,    "desc":"Ore dari dalam lubang hitam.",                                   "tier":"cosmic"},
-    "gamma_crystal":    {"name":"☢️ Kristal Gamma",           "emoji":"☢️","value":35000000,   "rarity":0.0004,   "xp":1200000,   "kg_min":0.1,    "kg_max":1000.0,   "desc":"Kristal teriradiasi sinar gamma dari magnetar.",                 "tier":"cosmic"},
-    "supernova_ash":    {"name":"💥 Abu Supernova",           "emoji":"💥","value":45000000,    "rarity":0.00025,  "xp":1800000,   "kg_min":0.05,   "kg_max":800.0,    "desc":"Abu dari ledakan supernova bintang raksasa.",                    "tier":"cosmic"},
-    "black_hole_dust":  {"name":"⚫ Debu Lubang Hitam",       "emoji":"⚫","value":80000000,    "rarity":0.00012,  "xp":3000000,   "kg_min":0.001,  "kg_max":200.0,    "desc":"Debu dari tepi horizon peristiwa lubang hitam.",                 "tier":"cosmic"},
-    "magnetar_shard":   {"name":"🧲 Serpihan Magnetar",      "emoji":"🧲","value":55000000,    "rarity":0.00018,  "xp":2200000,   "kg_min":1.0,    "kg_max":5000.0,   "desc":"Serpihan bintang dengan medan magnet terkuat.",                  "tier":"cosmic"},
-    "warp_crystal":     {"name":"🌀 Kristal Warp",           "emoji":"🌀","value":70000000,    "rarity":0.00013,  "xp":2800000,   "kg_min":0.1,    "kg_max":1000.0,   "desc":"Kristal yang melengkungkan ruang di sekitarnya.",                "tier":"cosmic"},
+    "cosmic_dust":      {"name":"🌠 Debu Kosmik",            "emoji":"🌠","value":5000000,     "rarity":0.003,    "xp":200000,    "kg_min":0.015,   "kg_max":150.0,    "desc":"Debu dari tepi galaksi. Hampir mustahil ditemukan!",             "tier":"cosmic"},
+    "nebula_ore":       {"name":"🌌 Bijih Nebula",            "emoji":"🌌","value":12500000,    "rarity":0.001,    "xp":400000,    "kg_min":0.6,    "kg_max":2400.0,   "desc":"Bijih dari awan nebula antarbintang.",                           "tier":"cosmic"},
+    "time_crystal":     {"name":"⏳ Kristal Waktu",           "emoji":"⏳","value":30000000,    "rarity":0.0005,   "xp":1000000,   "kg_min":0.09,    "kg_max":600.0,   "desc":"Kristal mengandung energi waktu.",                               "tier":"cosmic"},
+    "dark_energy_ore":  {"name":"🫥 Materi Gelap",           "emoji":"🫥","value":40000000,    "rarity":0.0003,   "xp":1500000,   "kg_min":0.03,    "kg_max":450.0,   "desc":"Materi gelap yang nyaris tidak terdeteksi.",                     "tier":"cosmic"},
+    "pulsar_fragment":  {"name":"💫 Serpihan Pulsar",         "emoji":"💫","value":20000000,    "rarity":0.0008,   "xp":700000,    "kg_min":0.15,    "kg_max":900.0,   "desc":"Serpihan bintang pulsar yang berputar 700x/detik.",              "tier":"cosmic"},
+    "quasar_crystal":   {"name":"🔆 Kristal Quasar",         "emoji":"🔆","value":25000000,    "rarity":0.0006,   "xp":900000,    "kg_min":0.06,    "kg_max":750.0,   "desc":"Kristal dari pusat quasar paling terang.",                       "tier":"cosmic"},
+    "antimatter_shard": {"name":"💥 Serpihan Antimateri",    "emoji":"💥","value":50000000,    "rarity":0.0002,   "xp":2000000,   "kg_min":0.01,   "kg_max":150.0,    "desc":"Secuil antimateri — kontak dengan materi = ledakan.",            "tier":"cosmic"},
+    "neutron_core":     {"name":"⚪ Inti Neutron",            "emoji":"⚪","value":60000000,    "rarity":0.00015,  "xp":2500000,   "kg_min":1.5,    "kg_max":15000.0,  "desc":"Inti bintang neutron — lebih padat dari timbal.",                "tier":"cosmic"},
+    "singularity_ore":  {"name":"🌀 Bijih Singularitas",     "emoji":"🌀","value":100000000,   "rarity":0.0001,   "xp":4000000,   "kg_min":0.01,  "kg_max":30.0,    "desc":"Ore dari dalam lubang hitam.",                                   "tier":"cosmic"},
+    "gamma_crystal":    {"name":"☢️ Kristal Gamma",           "emoji":"☢️","value":35000000,   "rarity":0.0004,   "xp":1200000,   "kg_min":0.03,    "kg_max":300.0,   "desc":"Kristal teriradiasi sinar gamma dari magnetar.",                 "tier":"cosmic"},
+    "supernova_ash":    {"name":"💥 Abu Supernova",           "emoji":"💥","value":45000000,    "rarity":0.00025,  "xp":1800000,   "kg_min":0.015,   "kg_max":240.0,    "desc":"Abu dari ledakan supernova bintang raksasa.",                    "tier":"cosmic"},
+    "black_hole_dust":  {"name":"⚫ Debu Lubang Hitam",       "emoji":"⚫","value":80000000,    "rarity":0.00012,  "xp":3000000,   "kg_min":0.01,  "kg_max":60.0,    "desc":"Debu dari tepi horizon peristiwa lubang hitam.",                 "tier":"cosmic"},
+    "magnetar_shard":   {"name":"🧲 Serpihan Magnetar",      "emoji":"🧲","value":55000000,    "rarity":0.00018,  "xp":2200000,   "kg_min":0.3,    "kg_max":1500.0,   "desc":"Serpihan bintang dengan medan magnet terkuat.",                  "tier":"cosmic"},
+    "warp_crystal":     {"name":"🌀 Kristal Warp",           "emoji":"🌀","value":70000000,    "rarity":0.00013,  "xp":2800000,   "kg_min":0.03,    "kg_max":300.0,   "desc":"Kristal yang melengkungkan ruang di sekitarnya.",                "tier":"cosmic"},
     # DIVINE
-    "soul_fragment":    {"name":"👻 Pecahan Jiwa",            "emoji":"👻","value":75000000,    "rarity":0.0001,   "xp":3000000,   "kg_min":0.01,   "kg_max":300.0,    "desc":"Pecahan jiwa makhluk purba. Menyentuh keabadian.",               "tier":"divine"},
-    "eternity_stone":   {"name":"♾️ Batu Keabadian",          "emoji":"♾️","value":250000000,  "rarity":0.00005,  "xp":10000000,  "kg_min":1.0,    "kg_max":5000.0,   "desc":"Ada sejak sebelum alam semesta terbentuk.",                      "tier":"divine"},
-    "universe_core":    {"name":"🌐 Inti Semesta",            "emoji":"🌐","value":500000000,  "rarity":0.00001,  "xp":20000000,  "kg_min":10.0,   "kg_max":100000.0, "desc":"Inti dari alam semesta. Tidak ada yang lebih langka.",           "tier":"divine"},
-    "god_tear":         {"name":"💧 Air Mata Dewa",           "emoji":"💧","value":1000000000, "rarity":0.000005, "xp":50000000,  "kg_min":0.001,  "kg_max":100.0,    "desc":"Tetes air mata dewa yang jatuh dari langit ke-7.",               "tier":"divine"},
-    "creation_spark":   {"name":"✴️ Percikan Penciptaan",     "emoji":"✴️","value":2500000000,"rarity":0.000001, "xp":100000000, "kg_min":0.0001, "kg_max":10.0,     "desc":"Percikan energi dari momen penciptaan alam semesta.",            "tier":"divine"},
-    "omega_shard":      {"name":"🔱 Serpihan Omega",          "emoji":"🔱","value":1500000000,"rarity":0.000003, "xp":70000000,  "kg_min":0.1,    "kg_max":1000.0,   "desc":"Pecahan dari kekuatan Omega — akhir dari segalanya.",            "tier":"divine"},
-    "infinity_gem":     {"name":"♾️ Permata Tak Terbatas",    "emoji":"♾️","value":5000000000,"rarity":0.0000005,"xp":200000000, "kg_min":1.0,    "kg_max":100000.0, "desc":"Permata yang mengandung kekuatan tak terbatas.",                 "tier":"divine"},
-    "genesis_core":     {"name":"🌅 Inti Genesis",            "emoji":"🌅","value":3000000000,"rarity":0.0000008,"xp":120000000, "kg_min":5.0,    "kg_max":50000.0,  "desc":"Inti dari momen kelahiran semesta.",                             "tier":"divine"},
-    "divine_essence":   {"name":"✨ Esensi Ilahi",            "emoji":"✨","value":800000000, "rarity":0.000007, "xp":35000000,  "kg_min":0.01,   "kg_max":500.0,    "desc":"Esensi murni dari para dewa.",                                   "tier":"divine"},
-    "chaos_fragment":   {"name":"🌪️ Serpihan Chaos",         "emoji":"🌪️","value":2000000000,"rarity":0.000002, "xp":90000000,  "kg_min":0.5,    "kg_max":5000.0,   "desc":"Serpihan dari kekuatan chaos primordial.",                       "tier":"divine"},
+    "soul_fragment":    {"name":"👻 Pecahan Jiwa",            "emoji":"👻","value":75000000,    "rarity":0.0001,   "xp":3000000,   "kg_min":0.01,   "kg_max":90.0,    "desc":"Pecahan jiwa makhluk purba. Menyentuh keabadian.",               "tier":"divine"},
+    "eternity_stone":   {"name":"♾️ Batu Keabadian",          "emoji":"♾️","value":250000000,  "rarity":0.00005,  "xp":10000000,  "kg_min":0.3,    "kg_max":1500.0,   "desc":"Ada sejak sebelum alam semesta terbentuk.",                      "tier":"divine"},
+    "universe_core":    {"name":"🌐 Inti Semesta",            "emoji":"🌐","value":500000000,  "rarity":0.00001,  "xp":20000000,  "kg_min":3.0,   "kg_max":30000.0, "desc":"Inti dari alam semesta. Tidak ada yang lebih langka.",           "tier":"divine"},
+    "god_tear":         {"name":"💧 Air Mata Dewa",           "emoji":"💧","value":1000000000, "rarity":0.000005, "xp":50000000,  "kg_min":0.01,  "kg_max":30.0,    "desc":"Tetes air mata dewa yang jatuh dari langit ke-7.",               "tier":"divine"},
+    "creation_spark":   {"name":"✴️ Percikan Penciptaan",     "emoji":"✴️","value":2500000000,"rarity":0.000001, "xp":100000000, "kg_min":0.01, "kg_max":3.0,     "desc":"Percikan energi dari momen penciptaan alam semesta.",            "tier":"divine"},
+    "omega_shard":      {"name":"🔱 Serpihan Omega",          "emoji":"🔱","value":1500000000,"rarity":0.000003, "xp":70000000,  "kg_min":0.03,    "kg_max":300.0,   "desc":"Pecahan dari kekuatan Omega — akhir dari segalanya.",            "tier":"divine"},
+    "infinity_gem":     {"name":"♾️ Permata Tak Terbatas",    "emoji":"♾️","value":5000000000,"rarity":0.0000005,"xp":200000000, "kg_min":0.3,    "kg_max":30000.0, "desc":"Permata yang mengandung kekuatan tak terbatas.",                 "tier":"divine"},
+    "genesis_core":     {"name":"🌅 Inti Genesis",            "emoji":"🌅","value":3000000000,"rarity":0.0000008,"xp":120000000, "kg_min":1.5,    "kg_max":15000.0,  "desc":"Inti dari momen kelahiran semesta.",                             "tier":"divine"},
+    "divine_essence":   {"name":"✨ Esensi Ilahi",            "emoji":"✨","value":800000000, "rarity":0.000007, "xp":35000000,  "kg_min":0.01,   "kg_max":150.0,    "desc":"Esensi murni dari para dewa.",                                   "tier":"divine"},
+    "chaos_fragment":   {"name":"🌪️ Serpihan Chaos",         "emoji":"🌪️","value":2000000000,"rarity":0.000002, "xp":90000000,  "kg_min":0.15,    "kg_max":1500.0,   "desc":"Serpihan dari kekuatan chaos primordial.",                       "tier":"divine"},
 }
 
-KG_PRICE_MULTIPLIER = 0.3
+KG_PRICE_MULTIPLIER = 0.08   # ✅ Diturunkan: harga jual ore lebih murah
 
 def calculate_sell_price(ore_id: str, kg_weight: float) -> int:
     ore = ORES.get(ore_id, {})
@@ -272,18 +294,21 @@ def format_kg(kg: float) -> str:
         return f"{kg/1000:.1f} ton"
 
 ITEMS: dict = {
-    "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":50000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
-    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":125000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
-    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":250000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
-    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":500000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
-    "rainbow_gem":        {"name":"🌈 Rainbow Gem",                 "emoji":"🌈","price":200000,     "description":"+70% luck selama 30 menit!",                                           "effect":{"luck_buff":0.70,"duration":30},                 "stackable":True},
-    "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":350000,     "description":"+100% luck selama 20 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
-    "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":450000,      "description":"5x XP selama 20 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
-    "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":700000,      "description":"Cooldown mining -50% selama 20 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
+    "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":2000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
+    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":25000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
+    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":50000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
+    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":200000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
+    "rainbow_gem":        {"name":"🌈 Rainbow Gem",                 "emoji":"🌈","price":150000,     "description":"+70% luck selama 30 menit!",                                           "effect":{"luck_buff":0.70,"duration":30},                 "stackable":True},
+    "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":250000,     "description":"+100% luck selama 20 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
+    "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":100000,      "description":"5x XP selama 20 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
+    "xp_nova":            {"name":"💥 XP Nova",                     "emoji":"💥","price":250000,     "description":"10x XP selama 10 menit!",                                              "effect":{"xp_mult":10.0,"duration":10},                   "stackable":True},
+    "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":50000,      "description":"Cooldown mining -50% selama 20 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
+    "turbo_boost":        {"name":"⚡ Turbo Boost",                  "emoji":"⚡","price":150000,      "description":"Cooldown mining -75% selama 15 menit!",                                "effect":{"speed_boost":0.25,"duration":15},               "stackable":True},
+    "hunters_kit":        {"name":"🎯 Hunter's Kit",                "emoji":"🎯","price":85000,      "description":"2x XP + 20% luck selama 30 menit!",                                    "effect":{"xp_mult":2.0,"luck_buff":0.20,"duration":30},   "stackable":True},
     "mystery_box":        {"name":"📦 Mystery Box",                  "emoji":"📦","price":50000,      "description":"Kotak misterius! Isi acak bisa XP, item, atau ore.",                    "effect":{"mystery":True},                                 "stackable":True},
-    "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":2000000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
-    "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":4500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
-    "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":8000000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
+    "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":150000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
+    "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
+    "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":2500000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
 }
 
 ACHIEVEMENTS: dict = {
