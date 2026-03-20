@@ -46,6 +46,8 @@ HELP_TEXT = (
     "/daily — Ambil bonus harian\n"
     "/market — Jual beli ore antar pemain\n"
     "/transfer — Transfer ore ke pemain lain\n"
+    "/ores — 📖 Daftar semua ore per rarity (COMMON, UNCOMMON, dll)\n"
+    "/ores [tier] — Filter satu tier, contoh: /ores epic\n"
     "/leaderboard — Papan peringkat\n"
     "/vip — Cek status VIP kamu\n\n"
     "<b>🎒 UPGRADE BAG:</b>\n"
