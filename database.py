@@ -46,7 +46,7 @@ async def init_db():
             last_mine_time  TEXT    DEFAULT NULL,
             last_auto_mine  TEXT    DEFAULT NULL,
             bag_kg_used     REAL    DEFAULT 0.0,
-            bag_kg_max      REAL    DEFAULT 999999.0,
+            bag_kg_max      REAL    DEFAULT 100.0,
             total_kg_mined  REAL    DEFAULT 0.0,
             perm_xp_mult    REAL    DEFAULT 1.0,
             ore_kg_data     TEXT    DEFAULT '{}',
@@ -206,7 +206,7 @@ async def init_db():
                 await db.execute(col_sql)
             except Exception:
                 pass
-        await db.execute("UPDATE users SET bag_kg_max=999999.0 WHERE bag_kg_max < 999999.0")
+        await db.execute("UPDATE users SET bag_kg_max=100.0 WHERE bag_kg_max < 1.0 OR bag_kg_max IS NULL")
         await db.commit()
     logger.info("✅ DB initialized (v6)")
 
@@ -298,19 +298,28 @@ async def add_balance(user_id: int, amount: int, desc: str = ""):
         await db.commit()
 
 
-async def add_ore_to_inventory(user_id: int, ore_id: str, qty: int = 1, kg: float = 0.0):
+async def add_ore_to_inventory(user_id: int, ore_id: str, qty: int = 1, kg: float = 0.0,
+                               increment_mine_count: bool = False):
+    """Tambah ore ke inventory.
+    
+    increment_mine_count hanya True saat dipanggil dari proses mining (perform_mine),
+    bukan dari market, admin gift, mystery box, dll.
+    """
     user = await get_user(user_id)
     if not user:
         return
     inv = user.get("ore_inventory", {})
     inv[ore_id] = inv.get(ore_id, 0) + qty
     kg_data = user.get("ore_kg_data", {})
-    kg_data[ore_id] = kg_data.get(ore_id, 0.0) + kg
-    bag_kg_used = user.get("bag_kg_used", 0.0) + kg
-    mine_count = user.get("mine_count", 0) + 1
-    total_mined = user.get("total_mined", 0) + 1
-    await update_user(user_id, ore_inventory=inv, ore_kg_data=kg_data,
-                      bag_kg_used=bag_kg_used, mine_count=mine_count, total_mined=total_mined)
+    kg_data[ore_id] = round(kg_data.get(ore_id, 0.0) + kg, 2)
+    raw_kg_used = user.get("bag_kg_used", 0.0) + kg
+    bag_kg_max  = user.get("bag_kg_max", 100.0)
+    bag_kg_used = round(min(raw_kg_used, bag_kg_max), 2)
+    updates = dict(ore_inventory=inv, ore_kg_data=kg_data, bag_kg_used=bag_kg_used)
+    if increment_mine_count:
+        updates["mine_count"]  = user.get("mine_count", 0) + 1
+        updates["total_mined"] = user.get("total_mined", 0) + 1
+    await update_user(user_id, **updates)
 
 
 async def remove_ore_from_inventory(user_id: int, ore_id: str, qty: int) -> bool:
@@ -399,16 +408,16 @@ async def get_listing_by_id(listing_id: int) -> Optional[dict]:
 async def buy_market_listing(listing_id: int, buyer_id: int, buyer_username: str) -> tuple:
     listing = await get_listing_by_id(listing_id)
     if not listing:
-        return False, "❌ Listing tidak ditemukan."
+        return False, "❌ Listing tidak ditemukan.", None
     if listing["status"] != "active":
-        return False, "❌ Listing sudah tidak tersedia."
+        return False, "❌ Listing sudah tidak tersedia.", None
     if listing["seller_id"] == buyer_id:
-        return False, "❌ Tidak bisa membeli listing sendiri."
+        return False, "❌ Tidak bisa membeli listing sendiri.", None
     buyer = await get_user(buyer_id)
     if not buyer:
-        return False, "❌ User tidak ditemukan."
+        return False, "❌ User tidak ditemukan.", None
     if buyer["balance"] < listing["price_total"]:
-        return False, f"❌ Saldo tidak cukup. Butuh `{listing['price_total']:,}` koin."
+        return False, f"❌ Saldo tidak cukup. Butuh `{listing['price_total']:,}` koin.", None
 
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -426,7 +435,7 @@ async def buy_market_listing(listing_id: int, buyer_id: int, buyer_username: str
     avg_kg = (ore_data.get("kg_min", 0.5) + ore_data.get("kg_max", 2.0)) / 2
     total_kg = avg_kg * listing["quantity"]
     await add_ore_to_inventory(buyer_id, listing["ore_type"], listing["quantity"], total_kg)
-    return True, seller_earn
+    return True, seller_earn, listing
 
 
 async def cancel_market_listing(listing_id: int, user_id: int) -> tuple:
@@ -883,7 +892,7 @@ async def reset_all_users() -> int:
                 museum_ores           = '[]',
                 ore_kg_data           = '{}',
                 bag_kg_used           = 0.0,
-                bag_kg_max            = 999999.0,
+                bag_kg_max            = 100.0,
                 total_kg_mined        = 0.0,
                 daily_streak          = 0,
                 last_daily            = NULL,
