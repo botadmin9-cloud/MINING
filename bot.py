@@ -7,6 +7,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeCha
 
 from config import BOT_TOKEN, ADMIN_IDS
 from database import init_db
+from config import get_all_admin_ids
 from handlers import (start, mining, shop, profile, inventory,
                        equipment, daily, leaderboard, help,
                        admin, market, bag, favorite_museum)
@@ -56,6 +57,10 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="admin_giveore",         description="🪨 Beri ore ke user"),
     BotCommand(command="admin_givezone",        description="🌍 Buka zona untuk user"),
     BotCommand(command="admin_reset",           description="🔄 Reset data user"),
+    BotCommand(command="admin_resetall",        description="⚠️ Reset SEMUA data pemain"),
+    BotCommand(command="admin_listadmin",       description="🛡️ Lihat daftar admin"),
+    BotCommand(command="admin_addadmin",        description="➕ Tambah admin baru"),
+    BotCommand(command="admin_removeadmin",     description="➖ Hapus admin dinamis"),
     BotCommand(command="admin_setorephoto",     description="📸 Pasang foto ore"),
     BotCommand(command="admin_listorephoto",    description="📸 Daftar foto ore"),
     BotCommand(command="admin_delorephoto",     description="📸 Hapus foto ore"),
@@ -82,6 +87,7 @@ async def set_bot_commands(bot: Bot):
 
 async def main():
     await init_db()
+    await get_all_admin_ids()   # ✅ Load admin dinamis dari DB ke ADMIN_IDS
     logger.info("✅ Database initialized (v6 ULTIMATE)")
 
     bot = Bot(token=BOT_TOKEN)
