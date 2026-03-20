@@ -47,16 +47,12 @@ KG_PRICE_MULTIPLIER     = 0.08   # ✅ Diturunkan: harga jual ore lebih murah
 BAG_SLOT_DEFAULT        = 50
 BAG_SLOT_MAX            = 500
 BAG_SLOT_STEP           = 10
-BAG_SLOT_BASE_COST      = 50000
-BAG_KG_DEFAULT          = 999999.0
-BAG_KG_MAX              = 999999.0
-BAG_KG_UPGRADE_STEP     = 50.0
-BAG_KG_UPGRADE_COST     = 10000
+BAG_SLOT_BASE_COST      = 200000
 
 # ── Energy Upgrade ────────────────────────────────────────────
 ENERGY_UPGRADE_MAX       = 5000
 ENERGY_UPGRADE_STEP      = 100
-ENERGY_UPGRADE_BASE_COST = 150000
+ENERGY_UPGRADE_BASE_COST = 250000
 LUCKY_CHANCE             = 0.05
 CRITICAL_CHANCE          = 0.10
 
@@ -66,10 +62,10 @@ VIP_ENERGY_REGEN_BONUS   = 2       # VIP: +2 energy per regen
 VIP_LUCK_BONUS           = 0.03    # VIP: +3% luck
 VIP_CRIT_BONUS           = 0.02    # VIP: +2% crit
 VIP_PRICES = {
-    "1_month":  {"label": "1 Bulan",  "price": 40000,  "days": 30},
-    "3_months": {"label": "3 Bulan",  "price": 110000,  "days": 90},
-    "6_months": {"label": "6 Bulan",  "price": 200000, "days": 180},
-    "lifetime": {"label": "Lifetime", "price": 350000, "days": 36500},
+    "1_month":  {"label": "3 Hari",  "price": 7000,  "days": 3},
+    "3_months": {"label": "7 Hari",  "price": 14000,  "days": 7},
+    "6_months": {"label": "14 Hari",  "price": 25000, "days": 14},
+    "lifetime": {"label": "1 Bulan", "price": 50000, "days": 30},
 }
 VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
 TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
@@ -294,30 +290,26 @@ def format_kg(kg: float) -> str:
         return f"{kg/1000:.1f} ton"
 
 ITEMS: dict = {
-    "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":2000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
-    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":25000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
-    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":50000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
-    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":200000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
-    "rainbow_gem":        {"name":"🌈 Rainbow Gem",                 "emoji":"🌈","price":150000,     "description":"+70% luck selama 30 menit!",                                           "effect":{"luck_buff":0.70,"duration":30},                 "stackable":True},
-    "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":250000,     "description":"+100% luck selama 20 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
-    "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":100000,      "description":"5x XP selama 20 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
-    "xp_nova":            {"name":"💥 XP Nova",                     "emoji":"💥","price":250000,     "description":"10x XP selama 10 menit!",                                              "effect":{"xp_mult":10.0,"duration":10},                   "stackable":True},
-    "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":50000,      "description":"Cooldown mining -50% selama 20 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
-    "turbo_boost":        {"name":"⚡ Turbo Boost",                  "emoji":"⚡","price":150000,      "description":"Cooldown mining -75% selama 15 menit!",                                "effect":{"speed_boost":0.25,"duration":15},               "stackable":True},
-    "hunters_kit":        {"name":"🎯 Hunter's Kit",                "emoji":"🎯","price":85000,      "description":"2x XP + 20% luck selama 30 menit!",                                    "effect":{"xp_mult":2.0,"luck_buff":0.20,"duration":30},   "stackable":True},
-    "mystery_box":        {"name":"📦 Mystery Box",                  "emoji":"📦","price":50000,      "description":"Kotak misterius! Isi acak bisa XP, item, atau ore.",                    "effect":{"mystery":True},                                 "stackable":True},
-    "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":150000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
-    "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
-    "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":2500000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
+    "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":200000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
+    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":350000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
+    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":500000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
+    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":2000000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
+    "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":550000,     "description":"+50% luck selama 10 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
+    "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":700000,      "description":"5x XP selama 10 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
+    "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":600000,      "description":"Cooldown mining -50% selama 10 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
+    "mystery_box":        {"name":"📦 Mystery Box",                  "emoji":"📦","price":500000,      "description":"Kotak misterius! Isi acak bisa XP, item, atau ore.",                    "effect":{"mystery":True},                                 "stackable":True},
+    "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":1500000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
+    "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":3500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
+    "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":7500000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
 }
 
 ACHIEVEMENTS: dict = {
-    "first_mine":        {"name":"🥇 Pertama Kali!",        "desc":"Lakukan mining pertama",               "reward":5000},
-    "mine_10":           {"name":"⛏️ Penambang Pemula",     "desc":"Mining 10 kali",                       "reward":10000},
-    "mine_100":          {"name":"💪 Penambang Sejati",      "desc":"Mining 100 kali",                      "reward":50000},
-    "mine_1000":         {"name":"🏆 Master Miner",          "desc":"Mining 1.000 kali",                    "reward":500000},
-    "mine_10000":        {"name":"👑 Legend Miner",          "desc":"Mining 10.000 kali",                   "reward":5000000},
-    "mine_100000":       {"name":"🌟 God Miner",             "desc":"Mining 100.000 kali",                  "reward":50000000},
+    "first_mine":        {"name":"🥇 Pertama Kali!",        "desc":"Lakukan mining pertama",               "reward":500},
+    "mine_10":           {"name":"⛏️ Penambang Pemula",     "desc":"Mining 10 kali",                       "reward":1000},
+    "mine_100":          {"name":"💪 Penambang Sejati",      "desc":"Mining 100 kali",                      "reward":5000},
+    "mine_1000":         {"name":"🏆 Master Miner",          "desc":"Mining 1.000 kali",                    "reward":50000},
+    "mine_10000":        {"name":"👑 Legend Miner",          "desc":"Mining 10.000 kali",                   "reward":500000},
+    "mine_100000":       {"name":"🌟 God Miner",             "desc":"Mining 100.000 kali",                  "reward":5000000},
     "first_rare":        {"name":"🔮 Rare Hunter",           "desc":"Dapatkan ore rare pertama",            "reward":200000},
     "rich_100k":         {"name":"💰 Orang Kaya",            "desc":"Kumpulkan 100.000 koin",               "reward":10000},
     "rich_1m":           {"name":"💎 Jutawan",               "desc":"Kumpulkan 1.000.000 koin",             "reward":100000},
@@ -331,26 +323,26 @@ ACHIEVEMENTS: dict = {
     "void_shard":        {"name":"🌑 Void Seeker",           "desc":"Temukan Void Shard pertama",           "reward":500000},
     "daily_streak_7":    {"name":"🔥 7-Day Streak",          "desc":"Daily bonus 7 hari berturut",          "reward":250000},
     "daily_streak_30":   {"name":"🌙 30-Day Streak",         "desc":"Daily bonus 30 hari berturut",         "reward":2500000},
-    "daily_streak_100":  {"name":"💯 100-Day Streak",        "desc":"Daily bonus 100 hari berturut!",       "reward":25000000},
+    "daily_streak_100":  {"name":"💯 100-Day Streak",        "desc":"Daily bonus 100 hari berturut!",       "reward":2500000},
     "market_first":      {"name":"🏪 Pedagang Pertama",      "desc":"Pertama kali jual di market",          "reward":10000},
     "rebirth_1":         {"name":"🔄 Reborn",                "desc":"Lakukan rebirth pertama",              "reward":1000000},
     "cosmic_find":       {"name":"🌠 Cosmic Hunter",         "desc":"Temukan Debu Kosmik",                  "reward":1000000},
-    "divine_find":       {"name":"♾️ Divine Hunter",         "desc":"Temukan Batu Keabadian",               "reward":25000000},
+    "divine_find":       {"name":"♾️ Divine Hunter",         "desc":"Temukan Batu Keabadian",               "reward":2500000},
     "heavy_miner":       {"name":"🏋️ Heavy Miner",          "desc":"Kumpulkan total 1.000 kg ore",         "reward":250000},
-    "super_heavy":       {"name":"⚓ Super Heavy",           "desc":"Kumpulkan total 10.000 kg ore",        "reward":2500000},
-    "kg_master":         {"name":"🌍 KG Master",             "desc":"Kumpulkan total 100.000 kg ore",       "reward":25000000},
-    "ton_miner":         {"name":"🏗️ Ton Miner",            "desc":"Kumpulkan total 1.000 ton ore",        "reward":250000000},
-    "mega_ton":          {"name":"⚓ Mega Ton Miner",        "desc":"Kumpulkan total 30.000 ton ore",       "reward":2500000000},
-    "all_zones":         {"name":"🗺️ Penjelajah Dunia",      "desc":"Buka semua zona mining",               "reward":5000000},
+    "super_heavy":       {"name":"⚓ Super Heavy",           "desc":"Kumpulkan total 10.000 kg ore",        "reward":250000},
+    "kg_master":         {"name":"🌍 KG Master",             "desc":"Kumpulkan total 100.000 kg ore",       "reward":250000},
+    "ton_miner":         {"name":"🏗️ Ton Miner",            "desc":"Kumpulkan total 1.000 ton ore",        "reward":2500000},
+    "mega_ton":          {"name":"⚓ Mega Ton Miner",        "desc":"Kumpulkan total 30.000 ton ore",       "reward":25000000},
+    "all_zones":         {"name":"🗺️ Penjelajah Dunia",      "desc":"Buka semua zona mining",               "reward":500000},
     "first_mythical":    {"name":"🐉 Mythical Seeker",       "desc":"Temukan ore mythical pertama",         "reward":2500000},
-    "first_cosmic":      {"name":"🌌 Cosmic Seeker",         "desc":"Temukan ore cosmic pertama",           "reward":10000000},
-    "first_divine":      {"name":"🌈 Divine Seeker",         "desc":"Temukan ore divine pertama",           "reward":50000000},
+    "first_cosmic":      {"name":"🌌 Cosmic Seeker",         "desc":"Temukan ore cosmic pertama",           "reward":1000000},
+    "first_divine":      {"name":"🌈 Divine Seeker",         "desc":"Temukan ore divine pertama",           "reward":5000000},
     "collector_10":      {"name":"📦 Kolektor",               "desc":"Miliki 10 jenis ore berbeda",          "reward":500000},
     "collector_25":      {"name":"📦📦 Mega Kolektor",        "desc":"Miliki 25 jenis ore berbeda",          "reward":5000000},
     "tool_master":       {"name":"⚒️ Tool Master",           "desc":"Beli 10 alat berbeda",                 "reward":250000},
-    "legendary_find":    {"name":"💎 Legend Hunter",         "desc":"Temukan ore legendary pertama",        "reward":500000},
-    "neutron_miner":     {"name":"⚪ Neutron Miner",         "desc":"Temukan Inti Neutron",                 "reward":25000000},
-    "infinity_hunter":   {"name":"♾️ Infinity Hunter",       "desc":"Temukan Permata Tak Terbatas",         "reward":250000000},
+    "legendary_find":    {"name":"💎 Legend Hunter",         "desc":"Temukan ore legendary pertama",        "reward":50000},
+    "neutron_miner":     {"name":"⚪ Neutron Miner",         "desc":"Temukan Inti Neutron",                 "reward":2500000},
+    "infinity_hunter":   {"name":"♾️ Infinity Hunter",       "desc":"Temukan Permata Tak Terbatas",         "reward":25000000},
     "transfer_ore_first":{"name":"📦 Transfer Pertama",     "desc":"Kirim ore ke pemain lain pertama kali", "reward":25000},
     "vip_member":        {"name":"👑 VIP Member",            "desc":"Aktifkan VIP pertama kali",            "reward":50000},
 }
