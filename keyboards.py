@@ -322,8 +322,27 @@ def profile_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def leaderboard_kb() -> InlineKeyboardMarkup:
+def leaderboard_kb(period: str = "weekly", field: str = "balance") -> InlineKeyboardMarkup:
+    def btn(label, p, f):
+        mark = "✅ " if (p == period and f == field) else ""
+        return InlineKeyboardButton(text=f"{mark}{label}", callback_data=f"lb_{p}_{f}")
+
     return InlineKeyboardMarkup(inline_keyboard=[
+        # Period selector
+        [
+            InlineKeyboardButton(
+                text=("📅 ✅Weekly" if period == "weekly" else "📅 Weekly"),
+                callback_data="lb_weekly_balance"
+            ),
+            InlineKeyboardButton(
+                text=("🗓️ ✅Monthly" if period == "monthly" else "🗓️ Monthly"),
+                callback_data="lb_monthly_balance"
+            ),
+        ],
+        # Field selector
+        [btn("💰 Saldo", period, "balance"),  btn("⛏️ Mining", period, "mine_count")],
+        [btn("⚖️ Total KG", period, "total_kg"), btn("🪨 Total Ore", period, "ore_count")],
+        # Actions
         [InlineKeyboardButton(text="🔄 Refresh", callback_data="lb_refresh")],
         [InlineKeyboardButton(text="🏠 Menu Utama", callback_data="main_menu")],
     ])
