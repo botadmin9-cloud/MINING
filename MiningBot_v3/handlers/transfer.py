@@ -251,7 +251,11 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Gagal mengurangi ore!", show_alert=True)
         return
 
-    await add_ore_to_inventory(target_id, ore_id, qty)
+    # Hitung KG yang ikut ditransfer (rata-rata berat)
+    from config import ORES as _ORES, get_random_kg as _grkg
+    _ore_data = _ORES.get(ore_id, {})
+    _avg_kg = round((_ore_data.get("kg_min", 0.5) + _ore_data.get("kg_max", 2.0)) / 2 * qty, 2)
+    await add_ore_to_inventory(target_id, ore_id, qty, _avg_kg)
 
     # Update hitungan (skip untuk admin)
     if not is_admin:
