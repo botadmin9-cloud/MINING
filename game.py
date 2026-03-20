@@ -29,7 +29,7 @@ async def regen_energy(user: dict) -> dict:
             gain = int(minutes / ENERGY_COOLDOWN_MINUTES)
             if gain > 0:
                 from config import VIP_ENERGY_REGEN_BONUS
-                vip_extra = VIP_ENERGY_REGEN_BONUS if is_vip_active(user) else 0
+                vip_extra = VIP_ENERGY_REGEN_BONUS * gain if is_vip_active(user) else 0
                 new_e = min(user["energy"] + gain + vip_extra, user["max_energy"])
                 await update_user(user["user_id"], energy=new_e,
                                   last_energy_regen=now.isoformat())
@@ -256,7 +256,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     base_xp = ore["xp"]
     # Bonus XP berbasis KG: ore lebih berat = XP lebih banyak
     kg_xp_bonus = 1.0 + (ore_kg / ore.get("kg_max", 2.0)) * 0.5  # max +50% XP dari KG
-    xp_gain = int(base_xp * XP_BASE_MULTIPLIER * xp_mult * perm_xp_mult * tool_xp_bonus * kg_xp_bonus)
+    xp_gain = int(base_xp * XP_BASE_MULTIPLIER * xp_mult * perm_xp_mult * tool_xp_bonus * zone_xp_bonus * kg_xp_bonus)
 
 
     # ── Critical hit (XP bonus) ────────────────────────────────
@@ -290,29 +290,26 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         new_level += 1
         leveled_up = True
 
-    # Update KG used
-    new_kg_used = round(current_kg + ore_kg, 2)
-    if new_kg_used > max_kg and not is_admin:
-        new_kg_used = max_kg  # cap, tidak bisa lebih dari max
-
     updates = dict(
         energy=new_energy,
         xp=new_xp, level=new_level,
         last_energy_regen=datetime.now().isoformat(),
         last_mine_time=datetime.now().isoformat(),
-        bag_kg_used=new_kg_used,
+        # bag_kg_used TIDAK di-set di sini — dihandle oleh add_ore_to_inventory
+        # agar tidak terjadi double-update
     )
     await update_user(user_id, **updates)
 
     # Koin dari mining = 0 (koin hanya dari JUAL ore di Bag/Market)
     coin_gain = 0
 
-    # Tambah ore ke ore_inventory (dengan KG)
-    await add_ore_to_inventory(user_id, ore_id, 1, ore_kg)
+    # Tambah ore ke ore_inventory (dengan KG) + increment mine_count
+    await add_ore_to_inventory(user_id, ore_id, 1, ore_kg, increment_mine_count=True)
 
     # Hitung bag usage setelah tambah
     user_after = await get_user(user_id)
     bag_used = sum(user_after.get("ore_inventory", {}).values()) if user_after else 0
+    actual_kg_used = user_after.get("bag_kg_used", 0.0) if user_after else round(current_kg + ore_kg, 2)
 
     await log_mine(user_id, tool_id, tool["name"], zone_id,
                    ore_id, ore["name"], 0, xp_gain,
@@ -349,7 +346,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         "new_achievements": new_achievements,
         "bag_used":     bag_used,
         "bag_slots":    user.get("bag_slots", 50),
-        "bag_kg_used":  new_kg_used,
+        "bag_kg_used":  actual_kg_used,
         "bag_kg_max":   max_kg,
         "new_xp":       new_xp,
         "xp_needed":    xp_for_level(new_level),
@@ -775,12 +772,15 @@ def _mystery_box_reward(premium: bool = False, divine: bool = False) -> dict:
         mythical_ores = ["dragonstone","stardust","phoenix_ash","lunar_crystal","void_shard","dragon_heart","leviathan_scale","thunder_stone","glacial_shard","cursed_gem"]
         cosmic_ores = ["cosmic_dust","nebula_ore","time_crystal","dark_energy_ore","pulsar_fragment","quasar_crystal","antimatter_shard","neutron_core","singularity_ore","gamma_crystal"]
         divine_ores = ["soul_fragment","eternity_stone","universe_core","god_tear","creation_spark","omega_shard","infinity_gem"]
-        if roll < 0.50:
+        if roll < 0.45:
             return {"type": "ore", "ore_id": random.choice(mythical_ores)}
-        elif roll < 0.80:
+        elif roll < 0.72:
             return {"type": "ore", "ore_id": random.choice(cosmic_ores)}
-        elif roll < 0.95:
+        elif roll < 0.87:
             return {"type": "ore", "ore_id": random.choice(divine_ores)}
+        elif roll < 0.95:
+            amount = random.randint(500000, 5000000)
+            return {"type": "coins", "amount": amount}
         else:
             amount = random.randint(100000, 1000000)
             return {"type": "xp", "amount": amount}
