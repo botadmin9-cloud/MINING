@@ -52,6 +52,14 @@ async def cmd_start(message: Message, state: FSMContext):
             parse_mode="Markdown"
         )
     else:
+        # Update username & first_name jika berubah
+        needs_update = {}
+        if existing.get("username") != uname:
+            needs_update["username"] = uname
+        if existing.get("first_name") != fname:
+            needs_update["first_name"] = fname
+        if needs_update:
+            await update_user(uid, **needs_update)
         user = await regen_energy(existing)
         tool = TOOLS.get(user["current_tool"], TOOLS["stone_pick"])
         zone = ZONES.get(user.get("current_zone", "surface"), ZONES["surface"])
