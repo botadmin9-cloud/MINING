@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from datetime import datetime, timedelta
 
 from config import TOOLS, ZONES, ACHIEVEMENTS, ORES, xp_for_level, ADMIN_IDS, BAG_SLOT_DEFAULT
 from database import get_user, get_user_rank, get_ore_stats, update_user
@@ -10,6 +11,8 @@ from game import regen_energy, energy_full_in, make_bar
 from keyboards import profile_kb, back_main_kb
 
 router = Router()
+
+NAME_CHANGE_COOLDOWN_DAYS = 7
 
 
 class SetNameState(StatesGroup):
@@ -35,7 +38,6 @@ async def show_profile(message: Message):
 async def _send_profile(target, user: dict, tg_user):
     uid = user["user_id"]
     viewer_id = tg_user.id if hasattr(tg_user, "id") else uid
-    # BLOKIR: non-admin tidak bisa melihat profil admin
     if _is_admin(uid) and viewer_id != uid:
         msg = "❌ Profil ini tidak dapat dilihat."
         if isinstance(target, Message):
@@ -53,8 +55,6 @@ async def _send_profile(target, user: dict, tg_user):
     e_bar   = make_bar(user["energy"], user["max_energy"], 8)
 
     rebirth_txt = ""
-    # VIP status
-    from datetime import datetime
     vip_txt = ""
     vip_exp = user.get("vip_expires_at")
     if vip_exp:
@@ -63,13 +63,31 @@ async def _send_profile(target, user: dict, tg_user):
             if exp_dt > datetime.now():
                 days_left = (exp_dt - datetime.now()).days
                 vip_txt = f"\n👑 VIP         : `Aktif ({days_left} hari)`"
-            else:
-                vip_txt = ""
         except Exception:
             pass
     if user.get("rebirth_count", 0) > 0:
         rebirth_txt = (f"\n🔄 Rebirth    : `{user['rebirth_count']}x` "
                        f"(Perm XP: `{user.get('perm_xp_mult', 1.0):.1f}x`)")
+
+    # Hitung kapan bisa ganti nama lagi
+    last_change = user.get("last_name_change")
+    name_cd_txt = ""
+    if last_change and not _is_admin(uid):
+        try:
+            lc_dt = datetime.fromisoformat(last_change)
+            next_change = lc_dt + timedelta(days=NAME_CHANGE_COOLDOWN_DAYS)
+            if datetime.now() < next_change:
+                remaining = next_change - datetime.now()
+                days_left = remaining.days
+                hours_left = remaining.seconds // 3600
+                name_cd_txt = f"\n   _(Bisa ganti lagi: {days_left}h {hours_left}j lagi)_"
+            else:
+                name_cd_txt = "\n   _(Bisa ganti sekarang!)_"
+        except Exception:
+            name_cd_txt = ""
+    else:
+        if not _is_admin(uid):
+            name_cd_txt = "\n   _(Bisa ganti sekarang!)_"
 
     admin_badge = " 👑 *[ADMIN]*" if _is_admin(uid) else ""
     ore_inv   = user.get("ore_inventory", {})
@@ -77,34 +95,25 @@ async def _send_profile(target, user: dict, tg_user):
     ore_types = len([k for k, v in ore_inv.items() if v > 0])
     bag_slots = user.get("bag_slots", BAG_SLOT_DEFAULT)
 
-    # ✅ Tampilkan display_name (nama kustom) jika ada
-    display = (user.get("display_name") or "").strip()
-    if not display:
-        display = tg_user.first_name if hasattr(tg_user, "first_name") else user.get("first_name", "Miner")
-
-    uname_txt = f"@{tg_user.username}" if (hasattr(tg_user, "username") and tg_user.username) else ""
+    display = (user.get("display_name") or "").strip() or user.get("first_name", "Miner")
 
     text = (
-        f"👤 *Profil: {display}*{admin_badge}\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🆔 Telegram ID : `{uid}`\n"
-        + (f"📱 Username    : {uname_txt}\n" if uname_txt else "")
-        + f"🎮 Nama Game   : *{display}*\n"
-        f"🏆 Rank        : *#{rank}*\n"
-        f"⭐ Level       : *{lv}*\n"
-        f"📈 XP          : `{xp:,}` / `{next_xp:,}`\n"
-        f"   {xp_bar}\n\n"
+        f"👤 *Profil Penambang*{admin_badge}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🏷️ Nama        : *{display}*{name_cd_txt}\n"
+        f"🆔 ID          : `{uid}`\n"
+        f"⭐ Level       : `{lv}` / XP: `{xp:,}` / `{next_xp:,}`\n"
+        f"   {xp_bar}\n"
+        f"⚡ Energy      : `{user['energy']}/{user['max_energy']}`\n"
+        f"   {e_bar} (penuh: {energy_full_in(user)})\n"
         f"💰 Saldo       : `{user['balance']:,}` koin\n"
-        f"💎 Total Earn  : `{user.get('total_earned', 0):,}` koin\n"
-        f"🔢 Mine Count  : `{user['mine_count']:,}` kali\n"
-        f"🔥 Streak      : `{user.get('daily_streak', 0)}` hari\n"
-        f"⚡ Energy      : {e_bar} `{user['energy']}/{user['max_energy']}`\n"
-        f"⏰ Penuh dalam : *{energy_full_in(user)}*\n\n"
-        f"🎒 Bag         : `{ore_qty}/{bag_slots}` slot ({ore_types} jenis)\n"
-        f"⭐ Favorit     : `{len(user.get('favorite_ores',[]))}` ore\n"
-        f"🏛️ Museum      : `{len(user.get('museum_ores',[]))}` ore\n\n"
-        f"🔧 Alat Aktif  : {tool['emoji']} *{tool['name']}*\n"
-        f"   └ Power: `+{tool['power']}` | Speed: `{tool['speed_mult']}x`\n"
+        f"💸 Total Earn  : `{user.get('total_earned',0):,}` koin\n"
+        f"📊 Rank        : `#{rank}`\n\n"
+        f"⛏️ Mining      : `{user.get('mine_count',0):,}x`\n"
+        f"⚖️ Total KG    : `{user.get('total_kg_mined',0):.2f}` kg\n"
+        f"🪨 Ore di Bag  : `{ore_qty}` buah ({ore_types} jenis)\n"
+        f"🎒 Slot Bag    : `{ore_qty}/{bag_slots}`\n"
+        f"🔧 Alat Aktif  : {tool['emoji']} {tool['name']}\n"
         f"📍 Zona Aktif  : {zone['name']}\n"
         f"🏅 Prestasi    : `{len(user['achievements'])}` / `{len(ACHIEVEMENTS)}`"
         f"{rebirth_txt}{vip_txt}\n\n"
@@ -118,12 +127,39 @@ async def _send_profile(target, user: dict, tg_user):
 
 @router.message(Command("setname"))
 async def cmd_setname(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    user = await get_user(uid)
+    if not user:
+        await message.answer("❌ Ketik /start!")
+        return
+
+    # Cek cooldown (admin bebas)
+    if not _is_admin(uid):
+        last_change = user.get("last_name_change")
+        if last_change:
+            try:
+                lc_dt = datetime.fromisoformat(last_change)
+                next_change = lc_dt + timedelta(days=NAME_CHANGE_COOLDOWN_DAYS)
+                if datetime.now() < next_change:
+                    remaining = next_change - datetime.now()
+                    days_left = remaining.days
+                    hours_left = remaining.seconds // 3600
+                    await message.answer(
+                        f"⏳ *Belum bisa ganti nama!*\n\n"
+                        f"Ganti nama hanya bisa dilakukan *1x per minggu*.\n"
+                        f"Coba lagi dalam: `{days_left}` hari `{hours_left}` jam.",
+                        parse_mode="Markdown"
+                    )
+                    return
+            except Exception:
+                pass
+
     await state.set_state(SetNameState.waiting_name)
-    user = await get_user(message.from_user.id)
     current = user.get("display_name", "") if user else ""
     await message.answer(
         f"✏️ *Ganti Nama Game*\n\n"
         f"Nama saat ini: *{current or '(belum diset)'}*\n\n"
+        f"⚠️ Nama hanya bisa diganti *1x per minggu*!\n\n"
         f"Masukkan nama baru (2–30 karakter):\n"
         f"Atau /cancel untuk batal.",
         parse_mode="Markdown"
@@ -145,10 +181,12 @@ async def process_setname(message: Message, state: FSMContext):
         await message.answer("❌ Nama harus 2–30 karakter. Coba lagi:")
         return
     await state.clear()
-    await update_user(message.from_user.id, display_name=name)
+    now = datetime.now().isoformat()
+    await update_user(message.from_user.id, display_name=name, last_name_change=now)
     await message.answer(
         f"✅ *Nama game berhasil diubah!*\n\n"
         f"Nama baru: *{name}*\n\n"
+        f"ℹ️ Nama bisa diganti lagi dalam *7 hari*.\n"
         f"Nama ini akan tampil di Profil dan Leaderboard.",
         parse_mode="Markdown"
     )
