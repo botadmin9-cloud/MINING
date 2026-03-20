@@ -43,13 +43,12 @@ async def _mine_panel(user_id: int) -> tuple:
     # Cek apakah sedang mining multi
     if user.get("is_mining_multi") and not _is_admin(user_id):
         multi_type = user.get("mining_multi_type", "?")
-        started = user.get("mining_multi_started", "")
         return (
             f"⛏️ *Sedang Mining {multi_type}...*\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"⏳ Proses mining sedang berjalan!\n"
             f"🔄 Tidak bisa memulai mining baru hingga selesai.\n\n"
-            f"💡 Harap tunggu hingga mining {multi_type} selesai.",
+            f"💡 Harap tunggu hingga mining {multi_type} selesai."
         ), None
 
     user = await regen_energy(user)
@@ -62,6 +61,24 @@ async def _mine_panel(user_id: int) -> tuple:
     admin_tag = " 👑 *[ADMIN — Gratis & Cepat]*" if is_admin else (" ✨ *[VIP]*" if vip_active else "")
 
     ore_list = _zone_ore_list(zone_id)
+
+    # ── Hitung sisa waktu cooldown ─────────────────────────────
+    cooldown_status = ""
+    if not is_admin:
+        from datetime import datetime as _dt
+        last_mine = user.get("last_mine_time")
+        if last_mine:
+            try:
+                elapsed = (_dt.now() - _dt.fromisoformat(last_mine)).total_seconds()
+                remaining = cooldown - elapsed
+                if remaining > 0:
+                    cooldown_status = f"\n⏳ *Siap mining dalam: `{remaining:.1f}` detik*"
+                else:
+                    cooldown_status = "\n✅ *Siap mining sekarang!*"
+            except Exception:
+                cooldown_status = "\n✅ *Siap mining sekarang!*"
+        else:
+            cooldown_status = "\n✅ *Siap mining sekarang!*"
 
     text = (
         f"⛏️ *Panel Mining*{admin_tag}\n"
@@ -79,7 +96,8 @@ async def _mine_panel(user_id: int) -> tuple:
         f"   🪨 *Ore di zona ini:* _{ore_list}_\n\n"
         f"⚡ Energy: `{user['energy']}/{user['max_energy']}` "
         f"(penuh dalam *{energy_full_in(user)}*)\n"
-        f"💰 Saldo : `{user['balance']:,}` koin\n\n"
+        f"💰 Saldo : `{user['balance']:,}` koin"
+        f"{cooldown_status}\n\n"
         f"Pilih aksi mining:"
     )
 
