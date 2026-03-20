@@ -8,7 +8,8 @@ from config import (TOOLS, ORES, ITEMS, ACHIEVEMENTS, ZONES,
                     LUCKY_CHANCE, CRITICAL_CHANCE,
                     xp_for_level, MAX_LEVEL, ADMIN_IDS,
                     calculate_sell_price, get_random_kg, format_kg,
-                    KG_PRICE_MULTIPLIER, XP_BASE_MULTIPLIER)
+                    KG_PRICE_MULTIPLIER, XP_BASE_MULTIPLIER,
+                    BAG_KG_MAX, BAG_KG_UPGRADE_STEP, BAG_KG_UPGRADE_COST)
 from database import (get_user, update_user, log_mine, add_balance,
                        add_ore_to_inventory, remove_ore_from_inventory)
 
@@ -352,6 +353,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         "bag_kg_max":   max_kg,
         "new_xp":       new_xp,
         "xp_needed":    xp_for_level(new_level),
+        "cooldown_secs": get_mine_cooldown_seconds(user),
     }
 
 
@@ -435,6 +437,12 @@ def build_mine_result_text(r: dict) -> str:
             lines.append(f"🏅 *Prestasi baru: {ach['name']}* (+{ach['reward']:,}🪙)")
 
     lines.append(f"")
+    # Tambah info cooldown berikutnya
+    from datetime import datetime as _dt2
+    last_mine_time = r.get("last_mine_time_str", "")
+    cooldown_secs  = r.get("cooldown_secs", 0)
+    if cooldown_secs > 0:
+        lines.append(f"⏱️ Cooldown berikutnya: `{cooldown_secs}` detik")
     lines.append(f"💡 Jual ore di 🎒 *Bag* atau 🛒 *Market*!")
 
     return "\n".join(lines)
