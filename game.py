@@ -303,17 +303,8 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     )
     await update_user(user_id, **updates)
 
-    # FIX #4 & #5: Berikan koin langsung saat mining berdasarkan tool tier
-    buffs_now = get_active_buffs(user)
-    coin_mult_buff = get_buff_val(buffs_now, "coin_mult", 1.0) or 1.0
-    tool_coin_bonus = tool.get("coin_bonus", 1.0)
-    base_coin = max(1, int(ore["value"] * 0.05))  # 5% nilai ore sebagai koin langsung
-    coin_gain = max(1, int(base_coin * tool_coin_bonus * coin_mult_buff))
-    if is_crit:
-        coin_gain = int(coin_gain * 2)
-    elif is_lucky:
-        coin_gain = int(coin_gain * 1.5)
-    await add_balance(user_id, coin_gain, f"Mining {ore['name']}")
+    # Koin dari mining = 0 (koin hanya dari JUAL ore di Bag/Market)
+    coin_gain = 0
 
     # Tambah ore ke ore_inventory (dengan KG)
     await add_ore_to_inventory(user_id, ore_id, 1, ore_kg)
@@ -323,7 +314,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     bag_used = sum(user_after.get("ore_inventory", {}).values()) if user_after else 0
 
     await log_mine(user_id, tool_id, tool["name"], zone_id,
-                   ore_id, ore["name"], coin_gain, xp_gain,
+                   ore_id, ore["name"], 0, xp_gain,
                    is_crit, is_lucky, special_hit)
 
     # Update total KG mined (untuk achievement)
@@ -414,7 +405,7 @@ def build_mine_result_text(r: dict) -> str:
         f"   {tier_color} {ore['emoji']} *{ore['name']}*",
         f"   └ 💬 _{ore_desc}_",
         f"   └ ⚖️ Berat: `{format_kg(ore_kg)}` _{kg_desc}_",
-        f"   └ 💰 Koin didapat: `{coin_gain:,}` koin",
+        f"   └ 💰 Est. Jual: `{r.get('sell_price', 0):,}` koin (jual di Bag)",
         f"",
     ]
 
@@ -426,7 +417,7 @@ def build_mine_result_text(r: dict) -> str:
         f"╔════════════════════╗",
         f"  ⭐  +*{r['xp_gain']:,}* XP",
         f"  📦  +1 {ore['emoji']} {ore['name']} ({format_kg(ore_kg)})",
-        f"  💰  +`{coin_gain:,}` koin langsung",
+        f"  💰  Jual di Bag utk: ~`{r.get('sell_price', 0):,}` koin",
         f"╚════════════════════╝",
         f"",
         f"⚡ Energy : {energy_bar} `{r['new_energy']}/{r['max_energy']}`",
