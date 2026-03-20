@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -20,15 +20,26 @@ def _is_admin(uid: int) -> bool:
     return uid in ADMIN_IDS
 
 
+def _official_links_kb() -> InlineKeyboardMarkup:
+    """Tombol channel & grup official."""
+    from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
+    rows = []
+    if OFFICIAL_CHANNEL:
+        rows.append([InlineKeyboardButton(text="📢 Channel Official", url=OFFICIAL_CHANNEL)])
+    if OFFICIAL_GROUP:
+        rows.append([InlineKeyboardButton(text="👥 Grup Official", url=OFFICIAL_GROUP)])
+    rows.append([InlineKeyboardButton(text="🚀 Mulai Main!", callback_data="close_welcome")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    uid = message.from_user.id
+    uid   = message.from_user.id
     uname = message.from_user.username or ""
     fname = message.from_user.first_name or "Miner"
 
     existing = await get_user(uid)
     if not existing:
-        # ✅ Tanya username kustom untuk pemain baru
         await state.set_state(RegisterState.waiting_username)
         await state.update_data(uid=uid, uname=uname, fname=fname)
         await message.answer(
@@ -51,8 +62,8 @@ async def cmd_start(message: Message, state: FSMContext):
 
         admin_badge = " 👑 *[ADMIN]*" if _is_admin(uid) else ""
         bag_slots = user.get("bag_slots", 50)
-        ore_used = sum(user.get("ore_inventory", {}).values())
-        display = user.get("display_name") or user.get("first_name", fname)
+        ore_used  = sum(user.get("ore_inventory", {}).values())
+        display   = user.get("display_name") or user.get("first_name", fname)
 
         text = (
             f"👋 *Selamat kembali, {display}!*{admin_badge}\n\n"
@@ -67,6 +78,15 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
 
+        # Tampilkan tombol link official
+        from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
+        if OFFICIAL_CHANNEL or OFFICIAL_GROUP:
+            await message.answer(
+                "📢 *Bergabung ke komunitas official kami!*",
+                reply_markup=_official_links_kb(),
+                parse_mode="Markdown"
+            )
+
 
 @router.message(Command("skip"))
 async def cmd_skip_username(message: Message, state: FSMContext):
@@ -76,7 +96,7 @@ async def cmd_skip_username(message: Message, state: FSMContext):
         return
     data = await state.get_data()
     await state.clear()
-    uid = data.get("uid", message.from_user.id)
+    uid   = data.get("uid", message.from_user.id)
     uname = data.get("uname", "")
     fname = data.get("fname", "Miner")
     await _finish_register(message, uid, uname, fname, fname)
@@ -93,14 +113,14 @@ async def process_username(message: Message, state: FSMContext):
         return
     data = await state.get_data()
     await state.clear()
-    uid = data.get("uid", message.from_user.id)
+    uid   = data.get("uid", message.from_user.id)
     uname = data.get("uname", "")
     fname = data.get("fname", "Miner")
     await _finish_register(message, uid, uname, fname, display_name)
 
 
 async def _finish_register(message: Message, uid: int, uname: str,
-                            fname: str, display_name: str):
+                             fname: str, display_name: str):
     from config import STARTING_BALANCE
     await create_user(uid, uname, fname, display_name)
     admin_note = "\n👑 Kamu adalah *Admin Bot* ini!" if _is_admin(uid) else ""
@@ -118,16 +138,36 @@ async def _finish_register(message: Message, uid: int, uname: str,
         f"• `/bag` — Lihat & kelola ore\n"
         f"• `/buyenergy` — Tambah max energy\n"
         f"• `/buyslot` — Tambah slot bag\n"
-        f"• `/profile` — Lihat profil\n\n"
+        f"• `/profile` — Lihat profil\n"
+        f"• `/rare_ore` — Lihat semua ore rare\n\n"
         f"🚀 Gunakan menu di bawah untuk memulai!"
         f"{admin_note}"
     )
     await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
 
+    # Tampilkan tombol link official setelah register
+    from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
+    if OFFICIAL_CHANNEL or OFFICIAL_GROUP:
+        await message.answer(
+            "📢 *Bergabung ke komunitas official kami!*\n"
+            "_(Dapatkan info update, event, dan tips mining terbaru!)_",
+            reply_markup=_official_links_kb(),
+            parse_mode="Markdown"
+        )
+
+
+@router.callback_query(F.data == "close_welcome")
+async def cb_close_welcome(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.answer("🚀 Selamat bermain!")
+
 
 @router.callback_query(F.data == "main_menu")
 async def cb_main_menu(callback: CallbackQuery):
-    uid = callback.from_user.id
+    uid  = callback.from_user.id
     user = await get_user(uid)
     if not user:
         await callback.answer("Ketik /start dulu!")
@@ -135,9 +175,9 @@ async def cb_main_menu(callback: CallbackQuery):
     tool = TOOLS.get(user["current_tool"], TOOLS["stone_pick"])
     zone = ZONES.get(user.get("current_zone", "surface"), ZONES["surface"])
     admin_badge = " 👑" if _is_admin(uid) else ""
-    ore_used = sum(user.get("ore_inventory", {}).values())
-    bag_slots = user.get("bag_slots", 50)
-    display = user.get("display_name") or user.get("first_name", "Miner")
+    ore_used    = sum(user.get("ore_inventory", {}).values())
+    bag_slots   = user.get("bag_slots", 50)
+    display     = user.get("display_name") or user.get("first_name", "Miner")
     text = (
         f"🏠 *Menu Utama*{admin_badge}\n\n"
         f"👤 {display}\n"
@@ -155,3 +195,16 @@ async def cb_main_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "noop")
 async def cb_noop(callback: CallbackQuery):
     await callback.answer()
+
+
+@router.message(Command("links"))
+async def cmd_links(message: Message):
+    from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
+    if not OFFICIAL_CHANNEL and not OFFICIAL_GROUP:
+        await message.answer("ℹ️ Belum ada link official yang dikonfigurasi.")
+        return
+    await message.answer(
+        "📢 *Link Official Mining Bot*",
+        reply_markup=_official_links_kb(),
+        parse_mode="Markdown"
+    )
