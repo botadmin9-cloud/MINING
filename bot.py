@@ -39,6 +39,7 @@ PLAYER_COMMANDS = [
     BotCommand(command="vip",         description="👑 Cek status VIP"),
     BotCommand(command="transfer",    description="📦 Transfer ore ke pemain lain"),
     BotCommand(command="transferinfo", description="📊 Info sisa transfer minggu ini"),
+    BotCommand(command="ores",        description="📖 Lihat semua ore per rarity"),
 ]
 
 ADMIN_EXTRA_COMMANDS = [
