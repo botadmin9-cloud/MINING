@@ -11,6 +11,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
 # FIX #9: Channel Telegram untuk notifikasi market
 MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env, contoh: -1001234567890
 
+# Link channel & grup official (isi di .env)
+OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "")  # contoh: https://t.me/yourchannel
+OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "")    # contoh: https://t.me/yourgroup
+
+
 STARTING_BALANCE        = 1000
 DAILY_BONUS_BASE        = 500
 DAILY_BONUS_LEVEL       = 25
