@@ -284,7 +284,7 @@ async def handle_proof_photo(message: Message):
 
 # ── ADMIN: GIVE VIP ────────────────────────────────────────────
 
-@router.message(F.text.startswith("/admin_givevip"))
+@router.message(Command("admin_givevip"))
 async def cmd_admin_givevip(message: Message):
     if not _is_admin(message.from_user.id):
         return
@@ -380,7 +380,7 @@ async def cmd_admin_givevip(message: Message):
     )
 
 
-@router.message(F.text.startswith("/admin_revokevip"))
+@router.message(Command("admin_revokevip"))
 async def cmd_admin_revokevip(message: Message):
     if not _is_admin(message.from_user.id):
         return
