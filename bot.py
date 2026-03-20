@@ -8,6 +8,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeCha
 from config import BOT_TOKEN, ADMIN_IDS
 from database import init_db
 from config import get_all_admin_ids
+from middlewares import AutoRegisterMiddleware
 from handlers import (start, mining, shop, profile, inventory,
                        equipment, daily, leaderboard, help,
                        admin, market, bag, favorite_museum)
@@ -93,6 +94,10 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     # ✅ MemoryStorage diperlukan untuk FSM (registrasi username & setname)
     dp  = Dispatcher(storage=MemoryStorage())
+
+    # ✅ Daftarkan AutoRegisterMiddleware agar user otomatis terdaftar
+    dp.message.middleware(AutoRegisterMiddleware())
+    dp.callback_query.middleware(AutoRegisterMiddleware())
 
     # Register semua router
     dp.include_router(start.router)
