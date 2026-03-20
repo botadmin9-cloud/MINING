@@ -58,7 +58,7 @@ BAG_KG_UPGRADE_COST     = 100000
 # ── Energy Upgrade ────────────────────────────────────────────
 ENERGY_UPGRADE_MAX       = 5000
 ENERGY_UPGRADE_STEP      = 100
-ENERGY_UPGRADE_BASE_COST = 300000
+ENERGY_UPGRADE_BASE_COST = 250000
 LUCKY_CHANCE             = 0.05
 CRITICAL_CHANCE          = 0.10
 
