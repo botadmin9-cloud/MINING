@@ -793,3 +793,116 @@ async def get_weekly_leaderboard(field: str = "balance", limit: int = 10) -> lis
         async with db.execute(sql, params) as cur:
             rows = await cur.fetchall()
             return [_row_to_user(r) for r in rows]
+
+
+# ══════════════════════════════════════════════════════════════
+# DYNAMIC ADMIN MANAGEMENT
+# ══════════════════════════════════════════════════════════════
+
+async def init_admin_table():
+    """Buat tabel dynamic_admins jika belum ada."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS dynamic_admins (
+                user_id     INTEGER PRIMARY KEY,
+                added_by    INTEGER NOT NULL,
+                added_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
+                note        TEXT    DEFAULT ''
+            )
+        """)
+        await db.commit()
+
+
+async def add_dynamic_admin(user_id: int, added_by: int, note: str = "") -> bool:
+    await init_admin_table()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO dynamic_admins(user_id, added_by, note) VALUES(?,?,?)",
+            (user_id, added_by, note)
+        )
+        await db.commit()
+    return True
+
+
+async def remove_dynamic_admin(user_id: int) -> bool:
+    await init_admin_table()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "DELETE FROM dynamic_admins WHERE user_id=?", (user_id,)
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def get_dynamic_admins() -> list:
+    await init_admin_table()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM dynamic_admins ORDER BY added_at DESC"
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def is_dynamic_admin(user_id: int) -> bool:
+    await init_admin_table()
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT 1 FROM dynamic_admins WHERE user_id=?", (user_id,)
+        ) as cur:
+            return (await cur.fetchone()) is not None
+
+
+async def reset_all_users() -> int:
+    """Reset semua data pemain ke nilai awal. Mengembalikan jumlah user yang direset."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        import json as _json
+        cur = await db.execute("""
+            UPDATE users SET
+                balance               = 1000,
+                total_earned          = 0,
+                total_mined           = 0,
+                mine_count            = 0,
+                energy                = 500,
+                max_energy            = 500,
+                bag_slots             = 50,
+                level                 = 1,
+                xp                    = 0,
+                rebirth_count         = 0,
+                perm_coin_mult        = 1.0,
+                perm_xp_mult          = 1.0,
+                current_tool          = 'stone_pick',
+                current_zone          = 'surface',
+                owned_tools           = '["stone_pick"]',
+                unlocked_zones        = '["surface"]',
+                inventory             = '{}',
+                active_buffs          = '{}',
+                achievements          = '[]',
+                ore_inventory         = '{}',
+                favorite_ores         = '[]',
+                museum_ores           = '[]',
+                ore_kg_data           = '{}',
+                bag_kg_used           = 0.0,
+                bag_kg_max            = 999999.0,
+                total_kg_mined        = 0.0,
+                daily_streak          = 0,
+                last_daily            = NULL,
+                last_energy_regen     = NULL,
+                last_mine_time        = NULL,
+                last_auto_mine        = NULL,
+                vip_expires_at        = NULL,
+                vip_type              = NULL,
+                transfer_send_count   = 0,
+                transfer_receive_count= 0,
+                transfer_week_start   = NULL,
+                is_mining_multi       = 0,
+                mining_multi_type     = NULL,
+                mining_multi_started  = NULL
+        """)
+        # Juga bersihkan mining_log, transactions, market
+        await db.execute("DELETE FROM mining_log")
+        await db.execute("DELETE FROM transactions")
+        await db.execute("DELETE FROM market_listings")
+        await db.execute("DELETE FROM market_daily_count")
+        await db.commit()
+        return cur.rowcount
