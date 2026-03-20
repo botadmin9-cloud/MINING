@@ -162,7 +162,7 @@ async def cb_market_confirm_buy(callback: CallbackQuery):
     listing_id = int(callback.data.replace("market_confirm_buy_", ""))
     buyer_username = callback.from_user.username or callback.from_user.first_name
 
-    ok, msg, listing = await buy_market_listing(listing_id, callback.from_user.id, buyer_username)
+    ok, seller_earn, listing = await buy_market_listing(listing_id, callback.from_user.id, buyer_username)
     if ok:
         seller_tag = f"@{listing['seller_username']}" if listing["seller_username"] else listing["seller_name"]
         fee = int(listing["price_total"] * MARKET_FEE_PERCENT / 100)
@@ -207,7 +207,8 @@ async def cb_market_confirm_buy(callback: CallbackQuery):
         except Exception:
             pass
     else:
-        await callback.answer(msg, show_alert=True)
+        # seller_earn berisi pesan error saat ok=False
+        await callback.answer(str(seller_earn), show_alert=True)
 
 
 # ══════════════════════════════════════════════════════════════
