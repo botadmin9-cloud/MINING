@@ -7,6 +7,8 @@ from database import (get_user, update_user, get_all_users, get_total_users,
                        add_balance, save_admin_photo, get_admin_photos,
                        delete_admin_photo, set_ore_photo, get_ore_photo,
                        get_all_ore_photos, delete_ore_photo,
+                       set_tool_photo, get_tool_photo, get_all_tool_photos, delete_tool_photo,
+                       set_zone_photo, get_zone_photo, get_all_zone_photos, delete_zone_photo,
                        add_ore_to_inventory)
 from keyboards import admin_kb, back_main_kb
 
@@ -53,13 +55,19 @@ async def cmd_adminhelp(message: Message):
         "/admin_revokevip [user_id] — Cabut VIP",
         "<i>Plan ID: 1_month, 3_months, 6_months, lifetime</i>",
         "",
-        "<b>📸 Foto Admin & Ore:</b>",
+        "<b>📸 Foto Admin, Ore, Alat & Zona:</b>",
         "/admin_setphoto — Upload foto profil admin",
         "/admin_myphotos — Lihat foto profil admin",
         "/admin_deletephoto [id] — Hapus foto profil",
         "/admin_setorephoto [ore_id] — Pasang foto ORE",
         "/admin_listorephoto — Lihat semua ore berphoto",
         "/admin_delorephoto [ore_id] — Hapus foto ore",
+        "/admin_settoolphoto [tool_id] — Pasang foto ALAT MINING",
+        "/admin_listtoolphoto — Lihat semua alat berphoto",
+        "/admin_deltoolphoto [tool_id] — Hapus foto alat",
+        "/admin_setzonephoto [zone_id] — Pasang foto ZONA",
+        "/admin_listzonephoto — Lihat semua zona berphoto",
+        "/admin_delzonephoto [zone_id] — Hapus foto zona",
         "",
         "<b>📊 Statistik & Broadcast:</b>",
         "/admin_stats — Statistik bot keseluruhan",
@@ -623,3 +631,165 @@ async def cb_admin_users(callback: CallbackQuery):
     text = "\n".join(lines)
     await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
     await callback.answer()
+
+
+# ══════════════════════════════════════════════════════════════
+# FOTO ALAT MINING
+# ══════════════════════════════════════════════════════════════
+@router.message(Command("admin_settoolphoto"))
+async def cmd_settoolphoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "ℹ️ *Cara pasang foto alat:*\n\n"
+            "1. Reply foto dengan `/admin_settoolphoto [tool_id]`\n"
+            "2. Atau kirim foto dengan caption `/admin_settoolphoto [tool_id]`\n\n"
+            "Contoh tool_id: `stone_pick`, `diamond_drill`, dll.\n"
+            "Gunakan `/admin_tools` untuk melihat semua tool_id.",
+            parse_mode="Markdown"
+        )
+        return
+    tool_id = args[1].strip()
+    if tool_id not in TOOLS:
+        await message.answer(f"❌ Tool `{tool_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+
+    photo = None
+    caption = ""
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+        caption = " ".join(args[2:]) if len(args) > 2 else ""
+    elif message.photo:
+        photo = message.photo[-1]
+        caption = message.caption or ""
+
+    if not photo:
+        await message.answer("❌ Kirim/reply foto bersamaan dengan perintah!")
+        return
+
+    tool = TOOLS[tool_id]
+    await set_tool_photo(tool_id, photo.file_id, caption, message.from_user.id)
+    await message.answer(
+        f"✅ *Foto alat berhasil dipasang!*\n\n"
+        f"🔧 Alat: *{tool['name']}*\n"
+        f"🆔 ID: `{tool_id}`",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("admin_listtoolphoto"))
+async def cmd_listtoolphoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    photos = await get_all_tool_photos()
+    if not photos:
+        await message.answer("📋 Belum ada foto alat yang dipasang.")
+        return
+    lines = ["📋 *Daftar Alat Berphoto:*\n"]
+    for p in photos:
+        tool = TOOLS.get(p["tool_id"], {})
+        lines.append(
+            f"• *{tool.get('name', p['tool_id'])}*\n"
+            f"  ID: `{p['tool_id']}`\n"
+            f"  Caption: _{p.get('caption','') or 'Tidak ada'}_"
+        )
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(Command("admin_deltoolphoto"))
+async def cmd_deltoolphoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Format: `/admin_deltoolphoto [tool_id]`", parse_mode="Markdown")
+        return
+    tool_id = args[1].strip()
+    ok = await delete_tool_photo(tool_id)
+    if ok:
+        await message.answer(f"✅ Foto alat `{tool_id}` berhasil dihapus!", parse_mode="Markdown")
+    else:
+        await message.answer(f"❌ Foto alat `{tool_id}` tidak ditemukan!", parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# FOTO ZONA
+# ══════════════════════════════════════════════════════════════
+@router.message(Command("admin_setzonephoto"))
+async def cmd_setzonephoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "ℹ️ *Cara pasang foto zona:*\n\n"
+            "1. Reply foto dengan `/admin_setzonephoto [zone_id]`\n"
+            "2. Atau kirim foto dengan caption `/admin_setzonephoto [zone_id]`\n\n"
+            "Contoh zone_id: `surface`, `cave`, `lava_cave`, dll.\n"
+            "Gunakan `/admin_zones` untuk melihat semua zone_id.",
+            parse_mode="Markdown"
+        )
+        return
+    zone_id = args[1].strip()
+    if zone_id not in ZONES:
+        await message.answer(f"❌ Zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+
+    photo = None
+    caption = ""
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+        caption = " ".join(args[2:]) if len(args) > 2 else ""
+    elif message.photo:
+        photo = message.photo[-1]
+        caption = message.caption or ""
+
+    if not photo:
+        await message.answer("❌ Kirim/reply foto bersamaan dengan perintah!")
+        return
+
+    zone = ZONES[zone_id]
+    await set_zone_photo(zone_id, photo.file_id, caption, message.from_user.id)
+    await message.answer(
+        f"✅ *Foto zona berhasil dipasang!*\n\n"
+        f"📍 Zona: *{zone['name']}*\n"
+        f"🆔 ID: `{zone_id}`",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("admin_listzonephoto"))
+async def cmd_listzonephoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    photos = await get_all_zone_photos()
+    if not photos:
+        await message.answer("📋 Belum ada foto zona yang dipasang.")
+        return
+    lines = ["📋 *Daftar Zona Berphoto:*\n"]
+    for p in photos:
+        zone = ZONES.get(p["zone_id"], {})
+        lines.append(
+            f"• *{zone.get('name', p['zone_id'])}*\n"
+            f"  ID: `{p['zone_id']}`\n"
+            f"  Caption: _{p.get('caption','') or 'Tidak ada'}_"
+        )
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(Command("admin_delzonephoto"))
+async def cmd_delzonephoto(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Format: `/admin_delzonephoto [zone_id]`", parse_mode="Markdown")
+        return
+    zone_id = args[1].strip()
+    ok = await delete_zone_photo(zone_id)
+    if ok:
+        await message.answer(f"✅ Foto zona `{zone_id}` berhasil dihapus!", parse_mode="Markdown")
+    else:
+        await message.answer(f"❌ Foto zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
