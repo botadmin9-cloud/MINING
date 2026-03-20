@@ -1,27 +1,32 @@
 from aiogram import Router, F
-from aiogram.types import Message, PhotoSize
+from aiogram.types import Message, PhotoSize, CallbackQuery
 from aiogram.filters import Command
 
-from config import ADMIN_IDS, TOOLS, ITEMS, ZONES, ORES, MAX_LEVEL
+from config import ADMIN_IDS, STATIC_ADMIN_IDS, TOOLS, ITEMS, ZONES, ORES, MAX_LEVEL
 from database import (get_user, update_user, get_all_users, get_total_users,
                        add_balance, save_admin_photo, get_admin_photos,
                        delete_admin_photo, set_ore_photo, get_ore_photo,
                        get_all_ore_photos, delete_ore_photo,
                        set_tool_photo, get_tool_photo, get_all_tool_photos, delete_tool_photo,
                        set_zone_photo, get_zone_photo, get_all_zone_photos, delete_zone_photo,
-                       add_ore_to_inventory)
+                       add_ore_to_inventory,
+                       add_dynamic_admin, remove_dynamic_admin, get_dynamic_admins,
+                       is_dynamic_admin, reset_all_users)
 from keyboards import admin_kb, back_main_kb
 
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
+async def is_admin(user_id: int) -> bool:
+    """Cek apakah user adalah admin (statis dari .env ATAU dinamis dari DB)."""
+    if user_id in STATIC_ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(user_id)
 
 
 @router.message(Command("adminhelp"))
 async def cmd_adminhelp(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
 
     lines = [
@@ -48,7 +53,14 @@ async def cmd_adminhelp(message: Message):
         "/admin_giveitem [user_id] [item_id] [qty] — Beri item",
         "/admin_giveore [user_id] [ore_id] [qty] — Beri ore",
         "/admin_givezone [user_id] [zone_id] — Buka zona",
-        "/admin_reset [user_id] — Reset data user",
+        "/admin_reset [user_id] — Reset data 1 user",
+        "/admin_resetall KONFIRMASI — ⚠️ Reset SEMUA data pemain",
+        "",
+        "<b>🛡️ Manajemen Admin:</b>",
+        "/admin_listadmin — Lihat semua admin",
+        "/admin_addadmin [user_id] [catatan] — Tambah admin baru",
+        "/admin_removeadmin [user_id] — Hapus admin dinamis",
+        "<i>⚠️ addadmin & removeadmin hanya untuk super-admin (.env)</i>",
         "",
         "<b>👑 VIP Management:</b>",
         "/admin_givevip [user_id] [plan_id] — Beri VIP",
@@ -92,7 +104,7 @@ async def cmd_adminhelp(message: Message):
 
 @router.message(Command("admin_setphoto"))
 async def cmd_setphoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     if message.reply_to_message and message.reply_to_message.photo:
         photo = message.reply_to_message.photo[-1]
@@ -113,7 +125,7 @@ async def cmd_setphoto(message: Message):
 
 @router.message(F.photo & F.caption.startswith("/admin_setphoto"))
 async def cmd_setphoto_direct(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     photo = message.photo[-1]
     caption = (message.caption or "").replace("/admin_setphoto", "").strip()
@@ -123,7 +135,7 @@ async def cmd_setphoto_direct(message: Message):
 
 @router.message(Command("admin_myphotos"))
 async def cmd_myphotos(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     photos = await get_admin_photos(message.from_user.id)
     if not photos:
@@ -141,7 +153,7 @@ async def cmd_myphotos(message: Message):
 
 @router.message(Command("admin_deletephoto"))
 async def cmd_deletephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 2:
@@ -158,7 +170,7 @@ async def cmd_deletephoto(message: Message):
 
 @router.message(Command("admin_stats"))
 async def cmd_admin_stats(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     total = await get_total_users()
     users = await get_all_users()
@@ -182,7 +194,7 @@ async def cmd_admin_stats(message: Message):
 
 @router.message(Command("admin_info"))
 async def cmd_admin_info(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 2:
@@ -220,7 +232,7 @@ async def cmd_admin_info(message: Message):
 
 @router.message(Command("admin_addcoin"))
 async def cmd_addcoin(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 3:
@@ -237,7 +249,7 @@ async def cmd_addcoin(message: Message):
 
 @router.message(Command("admin_setlevel"))
 async def cmd_setlevel(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 3:
@@ -255,7 +267,7 @@ async def cmd_setlevel(message: Message):
 
 @router.message(Command("admin_setenergy"))
 async def cmd_setenergy(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 3:
@@ -279,7 +291,7 @@ async def cmd_setenergy(message: Message):
 
 @router.message(Command("admin_givetool"))
 async def cmd_givetool(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 3:
@@ -301,7 +313,7 @@ async def cmd_givetool(message: Message):
 
 @router.message(Command("admin_giveitem"))
 async def cmd_giveitem(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 3:
@@ -333,7 +345,7 @@ async def cmd_giveitem(message: Message):
 @router.message(Command("admin_giveore"))
 async def cmd_giveore(message: Message):
     """✅ Perintah baru: beri ore langsung ke user"""
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 4:
@@ -370,7 +382,7 @@ async def cmd_giveore(message: Message):
 
 @router.message(Command("admin_givezone"))
 async def cmd_givezone(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 3:
@@ -389,7 +401,7 @@ async def cmd_givezone(message: Message):
 
 @router.message(Command("admin_reset"))
 async def cmd_reset(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 2:
@@ -416,7 +428,7 @@ async def cmd_reset(message: Message):
 
 @router.message(Command("admin_broadcast"))
 async def cmd_broadcast(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     text = message.text.replace("/admin_broadcast", "").strip()
     if not text:
@@ -439,7 +451,7 @@ async def cmd_broadcast(message: Message):
 
 @router.message(Command("admin_tools"))
 async def cmd_admin_tools(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     lines = ["⛏️ *Daftar Tool ID:*\n"]
     for tid, t in TOOLS.items():
@@ -457,7 +469,7 @@ async def cmd_admin_tools(message: Message):
 
 @router.message(Command("admin_items"))
 async def cmd_admin_items(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     lines = ["🎒 *Daftar Item ID:*\n"]
     for iid, item in ITEMS.items():
@@ -473,7 +485,7 @@ async def cmd_admin_items(message: Message):
 
 @router.message(Command("admin_zones"))
 async def cmd_admin_zones(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     lines = ["🌍 *Daftar Zone ID:*\n"]
     for zid, z in ZONES.items():
@@ -483,7 +495,7 @@ async def cmd_admin_zones(message: Message):
 
 @router.message(Command("admin_ores"))
 async def cmd_admin_ores(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     lines = ["🪨 *Daftar Ore ID:*\n"]
     for oid, ore in ORES.items():
@@ -499,7 +511,7 @@ async def cmd_admin_ores(message: Message):
 
 @router.message(Command("admin_users"))
 async def cmd_admin_users(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     users = await get_all_users()
     lines = [f"👥 *Daftar User ({len(users)}):*\n"]
@@ -513,7 +525,7 @@ async def cmd_admin_users(message: Message):
 
 @router.message(Command("admin_setorephoto"))
 async def cmd_setorephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     ore_id_arg = parts[1] if len(parts) > 1 else None
@@ -542,7 +554,7 @@ async def cmd_setorephoto(message: Message):
 
 @router.message(F.photo & F.caption.regexp(r"^/admin_setorephoto"))
 async def cmd_setorephoto_direct(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.caption.split() if message.caption else []
     ore_id_arg = parts[1] if len(parts) > 1 else None
@@ -561,7 +573,7 @@ async def cmd_setorephoto_direct(message: Message):
 
 @router.message(Command("admin_listorephoto"))
 async def cmd_listorephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     photos = await get_all_ore_photos()
     if not photos:
@@ -576,7 +588,7 @@ async def cmd_listorephoto(message: Message):
 
 @router.message(Command("admin_delorephoto"))
 async def cmd_delorephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) < 2:
@@ -596,7 +608,7 @@ async def cmd_delorephoto(message: Message):
 
 @router.callback_query(F.data == "admin_stats")
 async def cb_admin_stats(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not await is_admin(callback.from_user.id):
         await callback.answer("❌ Bukan admin!", show_alert=True)
         return
     from database import get_total_users
@@ -616,7 +628,7 @@ async def cb_admin_stats(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_users")
 async def cb_admin_users(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not await is_admin(callback.from_user.id):
         await callback.answer("❌ Bukan admin!", show_alert=True)
         return
     from database import get_all_users
@@ -638,7 +650,7 @@ async def cb_admin_users(callback: CallbackQuery):
 # ══════════════════════════════════════════════════════════════
 @router.message(Command("admin_settoolphoto"))
 async def cmd_settoolphoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     args = message.text.split()
     if len(args) < 2:
@@ -681,7 +693,7 @@ async def cmd_settoolphoto(message: Message):
 
 @router.message(Command("admin_listtoolphoto"))
 async def cmd_listtoolphoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     photos = await get_all_tool_photos()
     if not photos:
@@ -700,7 +712,7 @@ async def cmd_listtoolphoto(message: Message):
 
 @router.message(Command("admin_deltoolphoto"))
 async def cmd_deltoolphoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     args = message.text.split()
     if len(args) < 2:
@@ -719,7 +731,7 @@ async def cmd_deltoolphoto(message: Message):
 # ══════════════════════════════════════════════════════════════
 @router.message(Command("admin_setzonephoto"))
 async def cmd_setzonephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     args = message.text.split()
     if len(args) < 2:
@@ -762,7 +774,7 @@ async def cmd_setzonephoto(message: Message):
 
 @router.message(Command("admin_listzonephoto"))
 async def cmd_listzonephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     photos = await get_all_zone_photos()
     if not photos:
@@ -781,7 +793,7 @@ async def cmd_listzonephoto(message: Message):
 
 @router.message(Command("admin_delzonephoto"))
 async def cmd_delzonephoto(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     args = message.text.split()
     if len(args) < 2:
@@ -793,3 +805,164 @@ async def cmd_delzonephoto(message: Message):
         await message.answer(f"✅ Foto zona `{zone_id}` berhasil dihapus!", parse_mode="Markdown")
     else:
         await message.answer(f"❌ Foto zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# MANAJEMEN ADMIN DINAMIS
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_addadmin"))
+async def cmd_addadmin(message: Message):
+    """Tambah admin baru secara dinamis (hanya super-admin dari .env yang bisa)."""
+    if message.from_user.id not in STATIC_ADMIN_IDS:
+        return  # Hanya super-admin yang bisa tambah admin
+    parts = message.text.split(None, 2)
+    if len(parts) < 2:
+        await message.answer(
+            "ℹ️ *Cara tambah admin:*\n\n"
+            "`/admin_addadmin <user_id> [catatan]`\n\n"
+            "Contoh:\n"
+            "`/admin_addadmin 123456789`\n"
+            "`/admin_addadmin 123456789 Admin backup`",
+            parse_mode="Markdown"
+        )
+        return
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        return
+    if target_id in STATIC_ADMIN_IDS:
+        await message.answer(
+            f"⚠️ User `{target_id}` sudah menjadi super-admin (dari .env).",
+            parse_mode="Markdown"
+        )
+        return
+    note = parts[2] if len(parts) > 2 else ""
+    already = await is_dynamic_admin(target_id)
+    if already:
+        await message.answer(
+            f"⚠️ User `{target_id}` sudah terdaftar sebagai admin dinamis.",
+            parse_mode="Markdown"
+        )
+        return
+    await add_dynamic_admin(target_id, message.from_user.id, note)
+    # Refresh ADMIN_IDS global
+    from config import get_all_admin_ids
+    await get_all_admin_ids()
+    user_info = await get_user(target_id)
+    name = ""
+    if user_info:
+        name = f" ({user_info.get('display_name') or user_info.get('first_name', '')})"
+    await message.answer(
+        f"✅ *Admin baru berhasil ditambahkan!*\n\n"
+        f"👤 User ID: `{target_id}`{name}\n"
+        f"📝 Catatan: _{note or 'Tidak ada'}_\n"
+        f"👑 Ditambahkan oleh: `{message.from_user.id}`",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("admin_removeadmin"))
+async def cmd_removeadmin(message: Message):
+    """Hapus admin dinamis (hanya super-admin dari .env yang bisa)."""
+    if message.from_user.id not in STATIC_ADMIN_IDS:
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer(
+            "ℹ️ Cara hapus admin:\n`/admin_removeadmin <user_id>`",
+            parse_mode="Markdown"
+        )
+        return
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ user_id harus angka!")
+        return
+    if target_id in STATIC_ADMIN_IDS:
+        await message.answer(
+            f"❌ Tidak bisa hapus super-admin `{target_id}` (didefinisikan di .env).",
+            parse_mode="Markdown"
+        )
+        return
+    ok = await remove_dynamic_admin(target_id)
+    # Refresh ADMIN_IDS global
+    from config import get_all_admin_ids
+    await get_all_admin_ids()
+    if ok:
+        await message.answer(
+            f"✅ Admin `{target_id}` berhasil dihapus.", parse_mode="Markdown"
+        )
+    else:
+        await message.answer(
+            f"❌ User `{target_id}` tidak ditemukan di daftar admin dinamis.",
+            parse_mode="Markdown"
+        )
+
+
+@router.message(Command("admin_listadmin"))
+async def cmd_listadmin(message: Message):
+    """Tampilkan semua admin (statis + dinamis)."""
+    if not await is_admin(message.from_user.id):
+        return
+    lines = ["👑 *Daftar Admin Bot*\n━━━━━━━━━━━━━━━━━━━━\n"]
+    lines.append("*🔒 Super Admin (dari .env):*")
+    for uid in STATIC_ADMIN_IDS:
+        u = await get_user(uid)
+        name = u.get("display_name") or u.get("first_name", "-") if u else "-"
+        lines.append(f"  • `{uid}` — {name}")
+    dynamic = await get_dynamic_admins()
+    lines.append(f"\n*🛡️ Admin Dinamis ({len(dynamic)}):*")
+    if dynamic:
+        for d in dynamic:
+            u = await get_user(d["user_id"])
+            name = u.get("display_name") or u.get("first_name", "-") if u else "-"
+            note = f" _{d['note']}_" if d.get("note") else ""
+            added = d.get("added_at", "")[:10]
+            lines.append(f"  • `{d['user_id']}` — {name}{note} (ditambah: {added})")
+    else:
+        lines.append("  _(Belum ada admin dinamis)_")
+    lines.append(
+        "\n💡 Gunakan `/admin_addadmin <user_id>` untuk tambah admin\n"
+        "💡 Gunakan `/admin_removeadmin <user_id>` untuk hapus admin"
+    )
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# RESET SEMUA DATA PEMAIN
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_resetall"))
+async def cmd_resetall(message: Message):
+    """Reset SEMUA data pemain ke nilai awal. Hanya super-admin."""
+    if message.from_user.id not in STATIC_ADMIN_IDS:
+        await message.answer("❌ Perintah ini hanya untuk super-admin!", parse_mode="Markdown")
+        return
+    # Konfirmasi pertama
+    parts = message.text.split()
+    if len(parts) < 2 or parts[1].upper() != "KONFIRMASI":
+        await message.answer(
+            "⚠️ *PERINGATAN KERAS!*\n\n"
+            "Perintah ini akan *mereset semua data pemain* ke nilai awal:\n"
+            "• Balance → 1,000 koin\n"
+            "• Level → 1\n"
+            "• Alat → Stone Pick\n"
+            "• Ore, Inventory, Museum, Favorit → kosong\n"
+            "• Mining log & Market → dihapus\n\n"
+            "❗ Tindakan ini *TIDAK BISA DIBATALKAN!*\n\n"
+            "Ketik `/admin_resetall KONFIRMASI` untuk melanjutkan.",
+            parse_mode="Markdown"
+        )
+        return
+
+    await message.answer("⏳ Mereset semua data pemain...", parse_mode="Markdown")
+    count = await reset_all_users()
+    await message.answer(
+        f"✅ *Reset selesai!*\n\n"
+        f"👥 Total pemain direset: `{count}`\n"
+        f"🗑️ Mining log, transaksi & market listing dihapus.\n"
+        f"⚙️ Semua pemain kembali ke awal.",
+        parse_mode="Markdown"
+    )
