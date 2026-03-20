@@ -9,11 +9,11 @@ ADMIN_IDS: list[int] = [int(x.strip()) for x in _raw_admins.split(",") if x.stri
 DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
 
 # FIX #9: Channel Telegram untuk notifikasi market
-MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env, contoh: -1001234567890
+MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "@miningmarketsell")  # isi di .env, contoh: -1001234567890
 
 # Link channel & grup official (isi di .env)
-OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "")  # contoh: https://t.me/yourchannel
-OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "")    # contoh: https://t.me/yourgroup
+OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "@miningholic")  # contoh: https://t.me/yourchannel
+OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "@miningholiic")    # contoh: https://t.me/yourgroup
 
 
 STARTING_BALANCE        = 1000
@@ -29,16 +29,12 @@ KG_PRICE_MULTIPLIER     = 0.3
 BAG_SLOT_DEFAULT        = 50
 BAG_SLOT_MAX            = 500
 BAG_SLOT_STEP           = 10
-BAG_SLOT_BASE_COST      = 50000
-BAG_KG_DEFAULT          = 999999.0
-BAG_KG_MAX              = 999999.0
-BAG_KG_UPGRADE_STEP     = 50.0
-BAG_KG_UPGRADE_COST     = 10000
+BAG_SLOT_BASE_COST      = 150000
 
 # ── Energy Upgrade ────────────────────────────────────────────
 ENERGY_UPGRADE_MAX       = 5000
 ENERGY_UPGRADE_STEP      = 100
-ENERGY_UPGRADE_BASE_COST = 150000
+ENERGY_UPGRADE_BASE_COST = 250000
 LUCKY_CHANCE             = 0.05
 CRITICAL_CHANCE          = 0.10
 
@@ -48,10 +44,10 @@ VIP_ENERGY_REGEN_BONUS   = 2       # VIP: +2 energy per regen
 VIP_LUCK_BONUS           = 0.03    # VIP: +3% luck
 VIP_CRIT_BONUS           = 0.02    # VIP: +2% crit
 VIP_PRICES = {
-    "1_month":  {"label": "1 Bulan",  "price": 40000,  "days": 30},
-    "3_months": {"label": "3 Bulan",  "price": 110000,  "days": 90},
-    "6_months": {"label": "6 Bulan",  "price": 200000, "days": 180},
-    "lifetime": {"label": "Lifetime", "price": 350000, "days": 36500},
+    "1_month":  {"label": "7 Hari",  "price": 15000,  "days": 7},
+    "3_months": {"label": "14 Hari",  "price": 30000,  "days": 14},
+    "6_months": {"label": "1 Bulan",  "price": 50000, "days": 30,
+    "lifetime": {"label": "3 Bulan", "price": 140000, "days": 90},
 }
 VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
 TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
@@ -276,21 +272,18 @@ def format_kg(kg: float) -> str:
         return f"{kg/1000:.1f} ton"
 
 ITEMS: dict = {
-    "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":2000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
-    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":25000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
-    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":50000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
-    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":200000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
-    "rainbow_gem":        {"name":"🌈 Rainbow Gem",                 "emoji":"🌈","price":150000,     "description":"+70% luck selama 30 menit!",                                           "effect":{"luck_buff":0.70,"duration":30},                 "stackable":True},
-    "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":250000,     "description":"+100% luck selama 20 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
-    "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":100000,      "description":"5x XP selama 20 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
-    "xp_nova":            {"name":"💥 XP Nova",                     "emoji":"💥","price":250000,     "description":"10x XP selama 10 menit!",                                              "effect":{"xp_mult":10.0,"duration":10},                   "stackable":True},
-    "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":50000,      "description":"Cooldown mining -50% selama 20 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
-    "turbo_boost":        {"name":"⚡ Turbo Boost",                  "emoji":"⚡","price":150000,      "description":"Cooldown mining -75% selama 15 menit!",                                "effect":{"speed_boost":0.25,"duration":15},               "stackable":True},
-    "hunters_kit":        {"name":"🎯 Hunter's Kit",                "emoji":"🎯","price":85000,      "description":"2x XP + 20% luck selama 30 menit!",                                    "effect":{"xp_mult":2.0,"luck_buff":0.20,"duration":30},   "stackable":True},
+    "energy_drink":       {"name":"🥤 Energy Drink",              "emoji":"🥤","price":50000,       "description":"Pulihkan 50 energy.",                                                 "effect":{"energy":50},                                   "stackable":True},
+    "energy_potion":      {"name":"⚡ Energy Potion",              "emoji":"⚡","price":125000,       "description":"Pulihkan 100 energy seketika.",                                        "effect":{"energy":100},                                  "stackable":True},
+    "mana_crystal":       {"name":"💠 Kristal Mana",               "emoji":"💠","price":250000,      "description":"Pulihkan 200 energy seketika.",                                        "effect":{"energy":200},                                  "stackable":True},
+    "titan_energy":       {"name":"⚡🔥 Titan Energy",             "emoji":"⚡","price":500000,      "description":"Pulihkan PENUH energy + buff energy.",                                  "effect":{"energy":9999},                                 "stackable":True},
+    "rainbow_gem":        {"name":"🌈 Rainbow Gem",                 "emoji":"🌈","price":200000,     "description":"+70% luck selama 30 menit!",                                           "effect":{"luck_buff":0.70,"duration":30},                 "stackable":True},
+    "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":350000,     "description":"+100% luck selama 20 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
+    "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":450000,      "description":"5x XP selama 20 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
+    "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":700000,      "description":"Cooldown mining -50% selama 20 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
     "mystery_box":        {"name":"📦 Mystery Box",                  "emoji":"📦","price":50000,      "description":"Kotak misterius! Isi acak bisa XP, item, atau ore.",                    "effect":{"mystery":True},                                 "stackable":True},
-    "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":150000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
-    "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
-    "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":2500000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
+    "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":2000000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
+    "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":4500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
+    "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":8000000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
 }
 
 ACHIEVEMENTS: dict = {
