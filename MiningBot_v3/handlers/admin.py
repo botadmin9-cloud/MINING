@@ -420,7 +420,7 @@ async def cmd_reset(message: Message):
         owned_tools=["stone_pick"], unlocked_zones=["surface"],
         inventory={}, active_buffs={}, achievements=[],
         ore_inventory={}, ore_kg_data={},
-        bag_slots=50, bag_kg_used=0.0, bag_kg_max=999999.0,
+        bag_slots=50, bag_kg_used=0.0, bag_kg_max=100.0,
         daily_streak=0, rebirth_count=0, perm_coin_mult=1.0, perm_xp_mult=1.0
     )
     await message.answer(f"✅ User `{uid}` berhasil direset.", parse_mode="Markdown")
