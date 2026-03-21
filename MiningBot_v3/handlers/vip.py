@@ -3,22 +3,28 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, PhotoSize
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 from config import ADMIN_IDS, VIP_PRICES, VIP_TRANSFER_INFO, TOPUP_TRANSFER_INFO
-from database import get_user, update_user, add_balance
+from database import get_user, update_user, add_balance, is_dynamic_admin
 from keyboards import (vip_shop_kb, vip_proof_kb, topup_shop_kb,
                         topup_proof_kb, shop_main_kb, back_main_kb)
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Temporary state storage (in-memory, per session)
-_pending_vip  = {}   # uid -> {"plan_id": ..., "waiting_proof": bool}
-_pending_topup = {}  # uid -> {"package": ..., "waiting_proof": bool}
+
+class VipProofState(StatesGroup):
+    waiting_vip_proof   = State()
+    waiting_topup_proof = State()
 
 
-def _is_admin(uid: int) -> bool:
-    return uid in ADMIN_IDS
+async def _is_admin(uid: int) -> bool:
+    """Cek admin statis (.env) ATAU dinamis (DB)."""
+    if uid in ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(uid)
 
 
 def _vip_status_text(user: dict) -> str:
@@ -61,12 +67,15 @@ async def cb_shop_vip(callback: CallbackQuery):
         "lalu kirim bukti transfer ke bot.\n"
         "Admin akan mengaktifkan VIP dalam 1x24 jam."
     )
-    await callback.message.edit_text(text, reply_markup=vip_shop_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=vip_shop_kb(has_vip=bool(user.get("vip_expires_at"))), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("vip_buy_"))
-async def cb_vip_buy(callback: CallbackQuery):
+async def cb_vip_buy(callback: CallbackQuery, state: FSMContext):
     plan_id = callback.data.replace("vip_buy_", "")
     plan = VIP_PRICES.get(plan_id)
     if not plan:
@@ -74,7 +83,7 @@ async def cb_vip_buy(callback: CallbackQuery):
         return
 
     uid = callback.from_user.id
-    _pending_vip[uid] = {"plan_id": plan_id, "waiting_proof": False}
+    await state.update_data(vip_plan_id=plan_id)
 
     text = (
         f"👑 *Paket VIP: {plan['label']}*\n"
@@ -89,39 +98,45 @@ async def cb_vip_buy(callback: CallbackQuery):
         "⚠️ VIP akan diaktifkan setelah admin verifikasi (maks 1x24 jam)"
     ).replace("{plan_id}", plan_id).replace("{uid}", str(uid))
 
-    await callback.message.edit_text(text, reply_markup=vip_proof_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=vip_proof_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data == "vip_proof")
-async def cb_vip_proof(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in _pending_vip:
-        # Pilih paket dulu
+async def cb_vip_proof(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if not data.get("vip_plan_id"):
         await callback.answer("Pilih paket VIP terlebih dahulu!", show_alert=True)
         return
-    _pending_vip[uid]["waiting_proof"] = True
+    await state.set_state(VipProofState.waiting_vip_proof)
     await callback.answer()
-    await callback.message.edit_text(
-        "📸 *Kirim Bukti Transfer*\n\n"
-        "Silakan kirim foto bukti transfer kamu sebagai *foto* (bukan file).\n\n"
-        "Bot akan meneruskan ke admin untuk verifikasi.",
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "📸 *Kirim Bukti Transfer*\n\n"
+            "Silakan kirim foto bukti transfer kamu sebagai *foto* (bukan file).\n\n"
+            "Bot akan meneruskan ke admin untuk verifikasi.",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "vip_confirm_transfer")
-async def cb_vip_confirm(callback: CallbackQuery):
-    uid = callback.from_user.id
-    _pending_vip[uid] = _pending_vip.get(uid, {})
-    _pending_vip[uid]["waiting_proof"] = True
+async def cb_vip_confirm(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(VipProofState.waiting_vip_proof)
     await callback.answer()
-    await callback.message.edit_text(
-        "📸 *Kirim Foto Bukti Transfer*\n\n"
-        "Kirim foto bukti transfer sekarang.\n"
-        "Admin akan memverifikasi dalam 1x24 jam.",
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "📸 *Kirim Foto Bukti Transfer*\n\n"
+            "Kirim foto bukti transfer sekarang.\n"
+            "Admin akan memverifikasi dalam 1x24 jam.",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
 
 
 # ── SHOP TOPUP ─────────────────────────────────────────────────
@@ -141,7 +156,10 @@ async def cb_shop_topup(callback: CallbackQuery):
         "• Rp 500.000 → 2 Milyar Koin 💎\n\n"
         "Pilih paket, transfer, lalu kirim bukti!"
     )
-    await callback.message.edit_text(text, reply_markup=topup_shop_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=topup_shop_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -156,7 +174,7 @@ TOPUP_PACKAGES = {
 
 
 @router.callback_query(F.data.startswith("topup_") & ~F.data.in_({"topup_proof", "topup_confirm_transfer"}))
-async def cb_topup_select(callback: CallbackQuery):
+async def cb_topup_select(callback: CallbackQuery, state: FSMContext):
     pkg_id = callback.data
     pkg = TOPUP_PACKAGES.get(pkg_id)
     if not pkg:
@@ -164,7 +182,7 @@ async def cb_topup_select(callback: CallbackQuery):
         return
 
     uid = callback.from_user.id
-    _pending_topup[uid] = {"package": pkg_id, "waiting_proof": False}
+    await state.update_data(topup_pkg_id=pkg_id)
 
     text = (
         f"💰 *Top Up: {pkg['label']}*\n"
@@ -177,116 +195,121 @@ async def cb_topup_select(callback: CallbackQuery):
         "⚠️ Saldo akan ditambahkan setelah admin verifikasi (maks 1x24 jam)"
     ).replace("{pkg_id}", pkg_id).replace("{uid}", str(uid))
 
-    await callback.message.edit_text(text, reply_markup=topup_proof_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=topup_proof_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data == "topup_confirm_transfer")
-async def cb_topup_confirm(callback: CallbackQuery):
-    uid = callback.from_user.id
-    _pending_topup[uid] = _pending_topup.get(uid, {})
-    _pending_topup[uid]["waiting_proof"] = True
+async def cb_topup_confirm(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(VipProofState.waiting_topup_proof)
     await callback.answer()
-    await callback.message.edit_text(
-        "📸 *Kirim Foto Bukti Transfer*\n\n"
-        "Kirim foto bukti transfer top up sekarang.\n"
-        "Admin akan memverifikasi dalam 1x24 jam.",
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "📸 *Kirim Foto Bukti Transfer*\n\n"
+            "Kirim foto bukti transfer top up sekarang.\n"
+            "Admin akan memverifikasi dalam 1x24 jam.",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "topup_proof")
-async def cb_topup_proof(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in _pending_topup:
+async def cb_topup_proof(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if not data.get("topup_pkg_id"):
         await callback.answer("Pilih paket top up terlebih dahulu!", show_alert=True)
         return
-    _pending_topup[uid]["waiting_proof"] = True
+    await state.set_state(VipProofState.waiting_topup_proof)
     await callback.answer()
-    await callback.message.edit_text(
-        "📸 *Kirim Foto Bukti Transfer*\n\n"
-        "Silakan kirim foto bukti transfer sebagai foto.\n"
-        "Admin akan memverifikasi dalam 1x24 jam.",
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "📸 *Kirim Foto Bukti Transfer*\n\n"
+            "Silakan kirim foto bukti transfer sebagai foto.\n"
+            "Admin akan memverifikasi dalam 1x24 jam.",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
 
 
 # ── PHOTO HANDLER (bukti transfer) ─────────────────────────────
 
-@router.message(F.photo)
-async def handle_proof_photo(message: Message):
+@router.message(VipProofState.waiting_vip_proof, F.photo)
+async def handle_vip_proof_photo(message: Message, state: FSMContext):
     uid = message.from_user.id
     bot = message.bot
+    data = await state.get_data()
+    plan_id = data.get("vip_plan_id", "unknown")
+    plan = VIP_PRICES.get(plan_id, {})
+    photo = message.photo[-1]
+    uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
 
-    # Cek apakah menunggu bukti VIP
-    if uid in _pending_vip and _pending_vip[uid].get("waiting_proof"):
-        plan_id = _pending_vip[uid].get("plan_id", "unknown")
-        plan = VIP_PRICES.get(plan_id, {})
-        photo = message.photo[-1]
-        user = await get_user(uid)
-        uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
+    for admin_id in ADMIN_IDS:
+        try:
+            caption = (
+                f"👑 *Bukti Transfer VIP*\n\n"
+                f"👤 User: {uname} (`{uid}`)\n"
+                f"📦 Paket: {plan.get('label', plan_id)}\n"
+                f"💰 Harga: Rp {plan.get('price', '?'):,}\n"
+                f"📅 Durasi: {plan.get('days', '?')} hari\n\n"
+                f"✅ Untuk approve: `/admin_givevip {uid} {plan_id}`\n"
+                f"❌ Untuk tolak: Abaikan saja"
+            )
+            await bot.send_photo(admin_id, photo.file_id, caption=caption, parse_mode="Markdown")
+        except Exception as e:
+            logger.warning(f"Gagal kirim bukti VIP ke admin {admin_id}: {e}")
 
-        # Kirim ke semua admin
-        for admin_id in ADMIN_IDS:
-            try:
-                caption = (
-                    f"👑 *Bukti Transfer VIP*\n\n"
-                    f"👤 User: {uname} (`{uid}`)\n"
-                    f"📦 Paket: {plan.get('label', plan_id)}\n"
-                    f"💰 Harga: Rp {plan.get('price', '?'):,}\n"
-                    f"📅 Durasi: {plan.get('days', '?')} hari\n\n"
-                    f"✅ Untuk approve: `/admin_givevip {uid} {plan_id}`\n"
-                    f"❌ Untuk tolak: Abaikan saja"
-                )
-                await bot.send_photo(admin_id, photo.file_id, caption=caption, parse_mode="Markdown")
-            except Exception as e:
-                logger.warning(f"Gagal kirim bukti VIP ke admin {admin_id}: {e}")
+    await state.clear()
+    await message.answer(
+        "✅ *Bukti transfer VIP berhasil dikirim!*\n\n"
+        "Admin akan memverifikasi dalam 1x24 jam.\n"
+        "Kamu akan mendapat notifikasi saat VIP aktif. 👑",
+        parse_mode="Markdown"
+    )
 
-        await message.answer(
-            "✅ *Bukti transfer VIP berhasil dikirim!*\n\n"
-            "Admin akan memverifikasi dalam 1x24 jam.\n"
-            "Kamu akan mendapat notifikasi saat VIP aktif. 👑",
-            parse_mode="Markdown"
-        )
-        _pending_vip.pop(uid, None)
-        return
 
-    # Cek apakah menunggu bukti Top Up
-    if uid in _pending_topup and _pending_topup[uid].get("waiting_proof"):
-        pkg_id = _pending_topup[uid].get("package", "unknown")
-        pkg = TOPUP_PACKAGES.get(pkg_id, {})
-        photo = message.photo[-1]
-        uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
+@router.message(VipProofState.waiting_topup_proof, F.photo)
+async def handle_topup_proof_photo(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    bot = message.bot
+    data = await state.get_data()
+    pkg_id = data.get("topup_pkg_id", "unknown")
+    pkg = TOPUP_PACKAGES.get(pkg_id, {})
+    photo = message.photo[-1]
+    uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.full_name
 
-        for admin_id in ADMIN_IDS:
-            try:
-                caption = (
-                    f"💰 *Bukti Transfer Top Up*\n\n"
-                    f"👤 User: {uname} (`{uid}`)\n"
-                    f"📦 Paket: {pkg.get('label', pkg_id)}\n"
-                    f"🪙 Koin: `{pkg.get('coins', 0):,}` koin\n\n"
-                    f"✅ Untuk approve: `/admin_addcoin {uid} {pkg.get('coins', 0)}`\n"
-                    f"❌ Untuk tolak: Abaikan saja"
-                )
-                await bot.send_photo(admin_id, photo.file_id, caption=caption, parse_mode="Markdown")
-            except Exception as e:
-                logger.warning(f"Gagal kirim bukti topup ke admin {admin_id}: {e}")
+    for admin_id in ADMIN_IDS:
+        try:
+            caption = (
+                f"💰 *Bukti Transfer Top Up*\n\n"
+                f"👤 User: {uname} (`{uid}`)\n"
+                f"📦 Paket: {pkg.get('label', pkg_id)}\n"
+                f"🪙 Koin: `{pkg.get('coins', 0):,}` koin\n\n"
+                f"✅ Untuk approve: `/admin_addcoin {uid} {pkg.get('coins', 0)}`\n"
+                f"❌ Untuk tolak: Abaikan saja"
+            )
+            await bot.send_photo(admin_id, photo.file_id, caption=caption, parse_mode="Markdown")
+        except Exception as e:
+            logger.warning(f"Gagal kirim bukti topup ke admin {admin_id}: {e}")
 
-        await message.answer(
-            "✅ *Bukti transfer Top Up berhasil dikirim!*\n\n"
-            "Admin akan memverifikasi dalam 1x24 jam.\n"
-            "Kamu akan mendapat notifikasi saat saldo ditambahkan. 💰",
-            parse_mode="Markdown"
-        )
-        _pending_topup.pop(uid, None)
-        return
+    await state.clear()
+    await message.answer(
+        "✅ *Bukti transfer Top Up berhasil dikirim!*\n\n"
+        "Admin akan memverifikasi dalam 1x24 jam.\n"
+        "Kamu akan mendapat notifikasi saat saldo ditambahkan. 💰",
+        parse_mode="Markdown"
+    )
 
 
 # ── ADMIN: GIVE VIP ────────────────────────────────────────────
 
 @router.message(Command("admin_givevip"))
 async def cmd_admin_givevip(message: Message):
-    if not _is_admin(message.from_user.id):
+    if not await _is_admin(message.from_user.id):
         return
 
     parts = message.text.strip().split()
@@ -382,7 +405,7 @@ async def cmd_admin_givevip(message: Message):
 
 @router.message(Command("admin_revokevip"))
 async def cmd_admin_revokevip(message: Message):
-    if not _is_admin(message.from_user.id):
+    if not await _is_admin(message.from_user.id):
         return
 
     parts = message.text.strip().split()
