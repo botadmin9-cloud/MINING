@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from config import ORES, ADMIN_IDS
 from database import get_user, update_user, get_ore_photo, is_dynamic_admin
 from keyboards import back_main_kb
+from handlers.bag import _build_ore_detail
 
 router = Router()
 
@@ -103,6 +104,16 @@ async def cb_fav_toggle(callback: CallbackQuery):
         await update_user(callback.from_user.id, favorite_ores=fav)
         await callback.answer(f"⭐ {ore['name']} ditambah ke Favorit!", show_alert=False)
 
+    # BUG FIX: Refresh panel detail agar tombol ⭐ langsung menampilkan state terbaru
+    # (sebelumnya panel tetap stale sampai user buka ulang detail)
+    user_fresh = await get_user(callback.from_user.id)
+    text, kb = _build_ore_detail(user_fresh, ore_id)
+    if text:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass  # pesan mungkin sudah dihapus / tidak berubah isi (MessageNotModified)
+
 
 @router.callback_query(F.data.startswith("fav_remove_"))
 async def cb_fav_remove(callback: CallbackQuery):
@@ -197,6 +208,16 @@ async def cb_museum_toggle(callback: CallbackQuery):
         await update_user(callback.from_user.id, museum_ores=museum)
         await callback.answer(f"🏛️ {ore['name']} disimpan ke Museum!", show_alert=False)
 
+    # BUG FIX: Refresh panel detail agar tombol 🏛️ langsung menampilkan state terbaru
+    # (sebelumnya panel tetap stale sampai user buka ulang detail)
+    user_fresh = await get_user(callback.from_user.id)
+    text, kb = _build_ore_detail(user_fresh, ore_id)
+    if text:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass  # pesan mungkin sudah dihapus / tidak berubah isi (MessageNotModified)
+
 
 @router.callback_query(F.data == "museum_view_photos")
 async def cb_museum_view_photos(callback: CallbackQuery):
@@ -281,7 +302,6 @@ async def cmd_ores_list(message: Message):
 
     # ── Filter satu tier ──────────────────────────────────────
     if filter_tier:
-        # Cocokkan awalan, misal "leg" → "legendary"
         matched = next((t for t in TIER_ORDER if t.startswith(filter_tier)), None)
         if not matched:
             valid = " | ".join(TIER_ORDER)
@@ -300,17 +320,26 @@ async def cmd_ores_list(message: Message):
             "━━━━━━━━━━━━━━━━━━━━",
             "",
         ]
-        for ore_id, ore in ores_in:
-            lines.append(f"{ore.get('emoji','')} *{ore.get('name', ore_id)}*  `[{ore_id}]`")
-            lines.append(f"     _{ore.get('desc','')}_")
-            lines.append("")
+        for i, (ore_id, ore) in enumerate(ores_in):
+            # Gunakan emoji dari field 'emoji', bukan dari 'name' (agar tidak double)
+            ore_emoji = ore.get('emoji', '🪨')
+            ore_name  = ore.get('name', ore_id)
+            # Hapus emoji dari awal name jika sama dengan ore_emoji
+            clean_name = ore_name.strip()
+            if clean_name.startswith(ore_emoji):
+                clean_name = clean_name[len(ore_emoji):].strip()
+            is_last = (i == len(ores_in) - 1)
+            connector = "└" if is_last else "├"
+            lines.append(f"{connector} {ore_emoji} *{clean_name}*")
+            lines.append(f"│   💰 `{ore.get('value',0):,}` koin/unit  •  🎲 `{ore.get('rarity',0)}%`")
+            lines.append(f"│   _{ore.get('desc','')}_")
+            if not is_last:
+                lines.append("│")
 
         text = "\n".join(lines)
-        # Split jika terlalu panjang
         if len(text) <= 4000:
             await message.answer(text, parse_mode="Markdown")
         else:
-            # Kirim per 20 ore
             chunk_lines = lines[:3]
             for line in lines[3:]:
                 chunk_lines.append(line)
@@ -321,44 +350,61 @@ async def cmd_ores_list(message: Message):
                 await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
         return
 
-    # ── Tampilkan semua tier (ringkasan) ──────────────────────
+    # ── Tampilkan semua tier (ringkasan rapi) ─────────────────
     total_ores = sum(len(v) for v in grouped.values())
     lines = [
         "📖 *DAFTAR ORE — Semua Tier*",
-        f"━━━━━━━━━━━━━━━━━━━━",
-        f"Total: *{total_ores} jenis ore*",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"🪨 Total: *{total_ores} jenis ore* tersedia",
         "",
-        "💡 Gunakan `/ores [tier]` untuk detail.",
+        "💡 `/ores [tier]` untuk detail lengkap",
         "Contoh: `/ores common` · `/ores rare` · `/ores divine`",
         "",
+        "┌────────────────────────────────",
     ]
 
-    for tier in TIER_ORDER:
+    tier_display_order = list(reversed(TIER_ORDER))  # dari terbaik ke terburuk
+    for tier in tier_display_order:
         ores_in = grouped.get(tier, [])
         if not ores_in:
             continue
         emoji, label = TIER_DISPLAY.get(tier, ("🪨", tier.upper()))
-        # Nama-nama ore dipisah koma
-        names = ", ".join(
-            f"{o.get('emoji','')} {o.get('name', oid)}"
-            for oid, o in ores_in
-        )
-        lines.append(f"{emoji} *{label}* `({len(ores_in)})`")
-        lines.append(names)
-        lines.append("")
+        is_last_tier = (tier == TIER_ORDER[0])  # common = terakhir ditampilkan
+        lines.append(f"│ {emoji} *{label}* `({len(ores_in)} ore)`")
+        # Tampilkan nama-nama ore dalam kolom rapi (max 4 per baris)
+        ore_names = []
+        for oid, o in ores_in:
+            ore_emoji = o.get('emoji', '')
+            ore_name  = o.get('name', oid)
+            clean_name = ore_name.strip()
+            if clean_name.startswith(ore_emoji):
+                clean_name = clean_name[len(ore_emoji):].strip()
+            ore_names.append(f"{ore_emoji} {clean_name}")
+        # Susun per baris, 3 ore per baris
+        for j in range(0, len(ore_names), 3):
+            chunk = ore_names[j:j+3]
+            lines.append("│   " + "  ·  ".join(chunk))
+        lines.append("│")
+
+    lines[-1] = "└────────────────────────────────"
 
     full = "\n".join(lines)
     if len(full) <= 4000:
         await message.answer(full, parse_mode="Markdown")
     else:
-        # Kirim header dulu, lalu per tier
-        await message.answer("\n".join(lines[:7]), parse_mode="Markdown")
-        for tier in TIER_ORDER:
+        await message.answer("\n".join(lines[:8]), parse_mode="Markdown")
+        for tier in tier_display_order:
             ores_in = grouped.get(tier, [])
             if not ores_in:
                 continue
             emoji, label = TIER_DISPLAY.get(tier, ("🪨", tier.upper()))
-            chunk = [f"{emoji} *{label}* `({len(ores_in)})`", ""]
-            for ore_id, ore in ores_in:
-                chunk.append(f"{ore.get('emoji','')} *{ore.get('name', ore_id)}*  `[{ore_id}]`")
+            chunk = [f"┌─ {emoji} *{label}* `({len(ores_in)} ore)`"]
+            for oid, o in ores_in:
+                ore_emoji = o.get('emoji', '')
+                ore_name  = o.get('name', oid)
+                clean_name = ore_name.strip()
+                if clean_name.startswith(ore_emoji):
+                    clean_name = clean_name[len(ore_emoji):].strip()
+                chunk.append(f"│ {ore_emoji} {clean_name}")
+            chunk.append("└────────────────────")
             await message.answer("\n".join(chunk), parse_mode="Markdown")
