@@ -1,10 +1,10 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT, calculate_sell_price, format_kg
+from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT, MARKET_DAILY_LIMIT, calculate_sell_price, format_kg
 from database import (get_user, get_market_listings, get_listing_by_id,
                        buy_market_listing, cancel_market_listing,
                        get_user_market_listings, create_market_listing,
@@ -23,8 +23,10 @@ async def _notify_channel(bot, text: str):
     from config import MARKET_CHANNEL_ID
     if not MARKET_CHANNEL_ID:
         return
+    # Konversi ke int jika berupa string angka (mis. "-1001234567890")
     try:
-        await bot.send_message(MARKET_CHANNEL_ID, text, parse_mode="HTML")
+        chat_id = int(MARKET_CHANNEL_ID) if str(MARKET_CHANNEL_ID).lstrip("-").isdigit() else MARKET_CHANNEL_ID
+        await bot.send_message(chat_id, text, parse_mode="HTML")
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Gagal kirim notif channel: {e}")
@@ -43,12 +45,11 @@ class SellOreState(StatesGroup):
 @router.message(Command("market"))
 async def show_market(message: Message):
     uid = message.from_user.id
-    from config import ADMIN_IDS
     daily_left = ""
     if uid not in ADMIN_IDS:
         cnt = await get_market_daily_count(uid)
-        remaining = max(0, 3 - cnt)
-        daily_left = f"\n📊 Sisa listing hari ini: *{remaining}/3*"
+        remaining = max(0, MARKET_DAILY_LIMIT - cnt)
+        daily_left = f"\n📊 Sisa listing hari ini: *{remaining}/{MARKET_DAILY_LIMIT}*"
     await message.answer(
         f"🛒 *Market Ore*\n\n"
         f"Jual beli ore dengan pemain lain!\n"
@@ -60,13 +61,16 @@ async def show_market(message: Message):
 
 @router.callback_query(F.data == "market_menu")
 async def cb_market_menu(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🛒 *Market Ore*\n\n"
-        "Jual beli ore dengan pemain lain!\n"
-        f"💡 Biaya listing: *{MARKET_FEE_PERCENT}%* dari total harga jual.",
-        reply_markup=market_main_kb(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "🛒 *Market Ore*\n\n"
+            "Jual beli ore dengan pemain lain!\n"
+            f"💡 Biaya listing: *{MARKET_FEE_PERCENT}%* dari total harga jual.",
+            reply_markup=market_main_kb(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -78,11 +82,14 @@ async def cb_market_list(callback: CallbackQuery):
     page = int(callback.data.split("_")[-1])
     listings = await get_market_listings(limit=50)
     if not listings:
-        await callback.message.edit_text(
-            "🛒 *Market Ore*\n\n📋 Belum ada listing tersedia.\nJadi yang pertama menjual!",
-            reply_markup=market_main_kb(),
-            parse_mode="Markdown"
-        )
+        try:
+            await callback.message.edit_text(
+                "🛒 *Market Ore*\n\n📋 Belum ada listing tersedia.\nJadi yang pertama menjual!",
+                reply_markup=market_main_kb(),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
         await callback.answer()
         return
 
@@ -91,11 +98,14 @@ async def cb_market_list(callback: CallbackQuery):
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"Klik untuk membeli:"
     )
-    await callback.message.edit_text(
-        text,
-        reply_markup=market_listing_kb(listings, page),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=market_listing_kb(listings, page),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -133,27 +143,29 @@ async def cb_market_buy_detail(callback: CallbackQuery):
     kb_rows = []
     if listing["seller_id"] != callback.from_user.id and can_afford:
         kb_rows.append([
-            __import__("aiogram.types", fromlist=["InlineKeyboardButton"]).InlineKeyboardButton(
+            InlineKeyboardButton(
                 text=f"💰 Beli Sekarang ({listing['price_total']:,}🪙)",
                 callback_data=f"market_confirm_buy_{listing_id}"
             )
         ])
     elif listing["seller_id"] == callback.from_user.id:
         kb_rows.append([
-            __import__("aiogram.types", fromlist=["InlineKeyboardButton"]).InlineKeyboardButton(
+            InlineKeyboardButton(
                 text="❌ Batalkan Listing Ini",
                 callback_data=f"market_cancel_{listing_id}"
             )
         ])
     kb_rows.append([
-        __import__("aiogram.types", fromlist=["InlineKeyboardButton"]).InlineKeyboardButton(
+        InlineKeyboardButton(
             text="🔙 Kembali", callback_data="market_list_0"
         )
     ])
-    from aiogram.types import InlineKeyboardMarkup
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -190,7 +202,10 @@ async def cb_market_confirm_buy(callback: CallbackQuery):
         await _notify_channel(callback.bot, channel_sold)
 
         await callback.answer("✅ Berhasil dibeli!", show_alert=True)
-        await callback.message.edit_text(full_msg, reply_markup=back_main_kb(), parse_mode="Markdown")
+        try:
+            await callback.message.edit_text(full_msg, reply_markup=back_main_kb(), parse_mode="Markdown")
+        except Exception:
+            pass
 
         # Notifikasi ke penjual
         try:
@@ -224,20 +239,65 @@ async def cb_market_sell(callback: CallbackQuery):
     ore_inv = {k: v for k, v in ore_inv.items() if v > 0}
 
     if not ore_inv:
-        await callback.message.edit_text(
-            "📦 *Inventory Ore Kosong!*\n\nMulai mining untuk mendapatkan ore.",
-            reply_markup=back_main_kb(),
-            parse_mode="Markdown"
-        )
+        try:
+            await callback.message.edit_text(
+                "📦 *Inventory Ore Kosong!*\n\nMulai mining untuk mendapatkan ore.",
+                reply_markup=back_main_kb(),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
         await callback.answer()
         return
 
-    await callback.message.edit_text(
-        "💰 *Jual Ore ke Market*\n\n"
-        "Pilih ore yang ingin dijual:",
-        reply_markup=ore_inventory_kb(ore_inv),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "💰 *Jual Ore ke Market*\n\n"
+            "Pilih ore yang ingin dijual:",
+            reply_markup=ore_inventory_kb(ore_inv),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
+    await callback.answer()
+
+
+# ══════════════════════════════════════════════════════════════
+# BUG FIX: Handler paginasi daftar ore saat menjual di market
+# ore_page_ dibuat di keyboards.py tapi handlernya tidak ada
+# ══════════════════════════════════════════════════════════════
+@router.callback_query(F.data.startswith("ore_page_"))
+async def cb_ore_page(callback: CallbackQuery):
+    """Handle paginasi keyboard daftar ore di menu Jual Market."""
+    try:
+        page = int(callback.data.replace("ore_page_", ""))
+    except ValueError:
+        await callback.answer()
+        return
+    user = await get_user(callback.from_user.id)
+    if not user:
+        await callback.answer("Ketik /start!")
+        return
+    ore_inv = {k: v for k, v in user.get("ore_inventory", {}).items() if v > 0}
+    if not ore_inv:
+        try:
+            await callback.message.edit_text(
+                "📦 *Inventory Ore Kosong!*\n\nMulai mining untuk mendapatkan ore.",
+                reply_markup=back_main_kb(),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
+        await callback.answer()
+        return
+    try:
+        await callback.message.edit_text(
+            "💰 *Jual Ore ke Market*\n\nPilih ore yang ingin dijual:",
+            reply_markup=ore_inventory_kb(ore_inv, page),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -255,14 +315,17 @@ async def cb_sell_ore_select(callback: CallbackQuery, state: FSMContext):
     await state.update_data(ore_id=ore_id, ore_name=ore["name"],
                              ore_emoji=ore["emoji"], qty_have=qty_have)
 
-    await callback.message.edit_text(
-        f"💰 *Jual {ore['emoji']} {ore['name']}*\n\n"
-        f"📦 Kamu punya: `{qty_have}` buah\n"
-        f"💡 Nilai dasar: `{ore['value']:,}` koin/buah\n\n"
-        f"Ketik jumlah yang ingin dijual (1 - {qty_have}):",
-        reply_markup=back_main_kb(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            f"💰 *Jual {ore['emoji']} {ore['name']}*\n\n"
+            f"📦 Kamu punya: `{qty_have}` buah\n"
+            f"💡 Nilai dasar: `{ore['value']:,}` koin/buah\n\n"
+            f"Ketik jumlah yang ingin dijual (1 - {qty_have}):",
+            reply_markup=back_main_kb(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -314,13 +377,19 @@ async def process_sell_price(message: Message, state: FSMContext):
     data = await state.get_data()
     qty = data["qty"]
     price_each = price_total // qty
+    if price_each <= 0:
+        await message.answer(
+            f"❌ Harga terlalu kecil!\n"
+            f"Total `{price_total}` koin untuk `{qty}` ore = `0` koin/buah.\n"
+            f"Harga minimal: *{qty} koin* (1 koin/buah).",
+            parse_mode="Markdown"
+        )
+        return
     fee = int(price_total * MARKET_FEE_PERCENT / 100)
     seller_gets = price_total - fee
 
-    # Cek batas listing harian (3x per hari, admin bebas)
+    # Cek batas listing harian (admin bebas)
     uid = message.from_user.id
-    from config import ADMIN_IDS
-    MARKET_DAILY_LIMIT = 3
     if uid not in ADMIN_IDS:
         daily_count = await get_market_daily_count(uid)
         if daily_count >= MARKET_DAILY_LIMIT:
@@ -335,6 +404,20 @@ async def process_sell_price(message: Message, state: FSMContext):
             # Kembalikan ore yang mungkin sudah dikurangi (belum dikurangi, jadi aman)
             return
 
+    # Hitung total KG aktual sebelum dikurangi (FIX #5: simpan untuk cancel yang akurat)
+    uid = message.from_user.id
+    user = await get_user(uid)
+    ore_kg_data = user.get("ore_kg_data", {}) if user else {}
+    ore_qty_owned = user.get("ore_inventory", {}).get(data["ore_id"], 0) if user else 0
+    stored_total_kg = ore_kg_data.get(data["ore_id"], 0.0)
+    if stored_total_kg > 0 and ore_qty_owned > 0:
+        per_kg = stored_total_kg / ore_qty_owned
+        listing_total_kg = round(per_kg * qty, 4)
+    else:
+        _ore = ORES.get(data["ore_id"], {})
+        _avg = (_ore.get("kg_min", 0.5) + _ore.get("kg_max", 2.0)) / 2
+        listing_total_kg = round(_avg * qty, 4)
+
     # Kurangi ore dari inventory
     removed = await remove_ore_from_inventory(message.from_user.id, data["ore_id"], qty)
     if not removed:
@@ -342,8 +425,7 @@ async def process_sell_price(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    # Buat listing
-    uid = message.from_user.id
+    # Buat listing (sertakan total_kg aktual)
     user = await get_user(uid)
     username = message.from_user.username or ""
     fname = message.from_user.first_name or "Miner"
@@ -356,7 +438,8 @@ async def process_sell_price(message: Message, state: FSMContext):
         ore_name=data["ore_name"],
         ore_emoji=data["ore_emoji"],
         quantity=qty,
-        price_each=price_each
+        price_each=price_each,
+        total_kg=listing_total_kg
     )
 
     await state.clear()
@@ -409,22 +492,24 @@ async def cb_my_listings(callback: CallbackQuery):
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"Klik untuk membatalkan:"
     )
-    await callback.message.edit_text(
-        text,
-        reply_markup=market_my_listings_kb(listings),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=market_my_listings_kb(listings),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("market_cancel_"))
 async def cb_market_cancel(callback: CallbackQuery):
     listing_id = int(callback.data.replace("market_cancel_", ""))
-    ok, msg = await cancel_market_listing(listing_id, callback.from_user.id)
+    ok, msg, listing_info = await cancel_market_listing(listing_id, callback.from_user.id)
     await callback.answer(msg[:200], show_alert=True)
     if ok:
-        # FIX #9: Notifikasi ke channel saat dibatalkan
-        listing_info = await get_listing_by_id(listing_id)
+        # FIX: gunakan listing_info yang dikembalikan langsung (sudah ada sebelum di-cancel)
         if listing_info:
             seller_name = callback.from_user.username or callback.from_user.first_name
             channel_cancel = (
@@ -437,8 +522,11 @@ async def cb_market_cancel(callback: CallbackQuery):
             )
             await _notify_channel(callback.bot, channel_cancel)
         listings = await get_user_market_listings(callback.from_user.id)
-        await callback.message.edit_text(
-            f"📦 *Listing Aktif Kamu ({len(listings)})*",
-            reply_markup=market_my_listings_kb(listings),
-            parse_mode="Markdown"
-        )
+        try:
+            await callback.message.edit_text(
+                f"📦 *Listing Aktif Kamu ({len(listings)})*",
+                reply_markup=market_my_listings_kb(listings),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
