@@ -25,8 +25,10 @@ async def _is_admin(uid: int) -> bool:
 @router.message(F.text == "🏪 Shop")
 @router.message(Command("shop"))
 async def show_shop(message: Message):
+    user = await get_user(message.from_user.id)
+    balance_txt = f"\n💰 Saldo kamu: `{user['balance']:,}` koin" if user else ""
     await message.answer(
-        "🏪 *Toko Mining*\n\nPilih kategori:",
+        f"🏪 *Toko Mining*{balance_txt}\n\nPilih kategori:",
         reply_markup=shop_main_kb(),
         parse_mode="Markdown"
     )
@@ -34,9 +36,11 @@ async def show_shop(message: Message):
 
 @router.callback_query(F.data == "shop_menu")
 async def cb_shop_menu(callback: CallbackQuery):
+    user = await get_user(callback.from_user.id)
+    balance_txt = f"\n💰 Saldo kamu: `{user['balance']:,}` koin" if user else ""
     try:
         await callback.message.edit_text(
-            "🏪 *Toko Mining*\n\nPilih kategori:",
+            f"🏪 *Toko Mining*{balance_txt}\n\nPilih kategori:",
             reply_markup=shop_main_kb(),
             parse_mode="Markdown"
         )
