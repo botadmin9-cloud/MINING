@@ -10,9 +10,13 @@ DB_PATH = "mining_bot.db"
 
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.executescript("""
         PRAGMA journal_mode=WAL;
+        PRAGMA synchronous=NORMAL;
+        PRAGMA cache_size=-64000;
+        PRAGMA foreign_keys=ON;
+        PRAGMA temp_store=MEMORY;
 
         CREATE TABLE IF NOT EXISTS users (
             user_id         INTEGER PRIMARY KEY,
@@ -206,7 +210,12 @@ async def init_db():
                 await db.execute(col_sql)
             except Exception:
                 pass
-        await db.execute("UPDATE users SET bag_kg_max=100.0 WHERE bag_kg_max < 1.0 OR bag_kg_max IS NULL")
+        await db.execute("UPDATE users SET bag_kg_max=100.0 WHERE bag_kg_max < 1.0 OR bag_kg_max > 1000.0 OR bag_kg_max IS NULL")
+        # FIX #5: Tambah kolom total_kg di market_listings jika belum ada
+        try:
+            await db.execute("ALTER TABLE market_listings ADD COLUMN total_kg REAL DEFAULT 0.0")
+        except Exception:
+            pass
         await db.commit()
     logger.info("✅ DB initialized (v6)")
 
@@ -247,7 +256,7 @@ def _row_to_user(row) -> dict:
 
 
 async def get_user(user_id: int) -> Optional[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         async with db.execute("SELECT * FROM users WHERE user_id=?", (user_id,)) as cur:
             row = await cur.fetchone()
             return _row_to_user(row) if row else None
@@ -257,7 +266,7 @@ async def create_user(user_id: int, username: str, first_name: str,
                       display_name: str = "") -> dict:
     from config import STARTING_BALANCE
     display_name = display_name or first_name
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             """INSERT OR IGNORE INTO users
                (user_id, username, first_name, display_name, balance)
@@ -268,6 +277,20 @@ async def create_user(user_id: int, username: str, first_name: str,
     return await get_user(user_id)
 
 
+# Whitelist kolom yang boleh diupdate untuk mencegah SQL injection
+_ALLOWED_USER_COLUMNS = {
+    "username","first_name","display_name","balance","total_earned","total_mined",
+    "mine_count","energy","max_energy","bag_slots","level","xp","rebirth_count",
+    "perm_coin_mult","current_tool","current_zone","owned_tools","unlocked_zones",
+    "inventory","active_buffs","achievements","ore_inventory","favorite_ores",
+    "museum_ores","daily_streak","last_daily","last_energy_regen","last_mine_time",
+    "last_auto_mine","bag_kg_used","bag_kg_max","total_kg_mined","perm_xp_mult",
+    "ore_kg_data","vip_expires_at","vip_type","transfer_send_count",
+    "transfer_receive_count","transfer_week_start","last_name_change",
+    "is_mining_multi","mining_multi_type","mining_multi_started"
+}
+
+
 async def update_user(user_id: int, **kwargs):
     if not kwargs:
         return
@@ -275,18 +298,32 @@ async def update_user(user_id: int, **kwargs):
                    "achievements","ore_inventory","favorite_ores","museum_ores","ore_kg_data"}
     sets, vals = [], []
     for k, v in kwargs.items():
+        if k not in _ALLOWED_USER_COLUMNS:
+            logger.warning(f"update_user: kolom tidak dikenal diabaikan: {k!r}")
+            continue
         sets.append(f"{k}=?")
         vals.append(json.dumps(v) if k in json_fields else v)
+    if not sets:
+        return
     vals.append(user_id)
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(f"UPDATE users SET {','.join(sets)} WHERE user_id=?", vals)
         await db.commit()
 
 
 async def add_balance(user_id: int, amount: int, desc: str = ""):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (amount, user_id))
-        if amount > 0:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        if amount < 0:
+            # Cegah saldo negatif: gunakan MAX(balance+amount, 0)
+            await db.execute(
+                "UPDATE users SET balance=MAX(balance+?,0) WHERE user_id=?",
+                (amount, user_id)
+            )
+        else:
+            await db.execute(
+                "UPDATE users SET balance=balance+? WHERE user_id=?",
+                (amount, user_id)
+            )
             await db.execute(
                 "UPDATE users SET total_earned=total_earned+? WHERE user_id=?",
                 (amount, user_id)
@@ -333,13 +370,14 @@ async def remove_ore_from_inventory(user_id: int, ore_id: str, qty: int) -> bool
     if inv[ore_id] <= 0:
         del inv[ore_id]
     kg_data = user.get("ore_kg_data", {})
-    if ore_id in kg_data and inv.get(ore_id, 0) == 0:
+    remaining_qty = inv.get(ore_id, 0)  # qty setelah pengurangan (sudah dikurangi di atas)
+    if ore_id in kg_data and remaining_qty == 0:
         removed_kg = kg_data.pop(ore_id, 0.0)
     elif ore_id in kg_data:
-        old_qty = inv.get(ore_id, 0) + qty
+        old_qty = remaining_qty + qty  # qty SEBELUM pengurangan
         if old_qty > 0:
             per_kg = kg_data[ore_id] / old_qty
-            kg_data[ore_id] = per_kg * inv.get(ore_id, 0)
+            kg_data[ore_id] = round(per_kg * remaining_qty, 4)
             removed_kg = per_kg * qty
         else:
             removed_kg = 0.0
@@ -353,7 +391,7 @@ async def remove_ore_from_inventory(user_id: int, ore_id: str, qty: int) -> bool
 async def log_mine(user_id: int, tool_id: str, tool_name: str, zone: str,
                    ore_type: str, ore_name: str, coins: int, xp_gained: int,
                    is_crit: bool = False, is_lucky: bool = False, special_hit: str = None):
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             """INSERT INTO mining_log
                (user_id,tool_id,tool_name,zone,ore_type,ore_name,coins,xp_gained,is_crit,is_lucky,special_hit)
@@ -366,22 +404,24 @@ async def log_mine(user_id: int, tool_id: str, tool_name: str, zone: str,
 
 async def create_market_listing(seller_id: int, seller_username: str, seller_name: str,
                                  ore_type: str, ore_name: str, ore_emoji: str,
-                                 quantity: int, price_each: int) -> Optional[int]:
+                                 quantity: int, price_each: int,
+                                 total_kg: float = 0.0) -> Optional[int]:
+    # FIX #5: simpan total_kg aktual agar cancel bisa kembalikan berat yang tepat
     price_total = price_each * quantity
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute(
             """INSERT INTO market_listings
-               (seller_id,seller_username,seller_name,ore_type,ore_name,ore_emoji,quantity,price_each,price_total)
-               VALUES(?,?,?,?,?,?,?,?,?)""",
+               (seller_id,seller_username,seller_name,ore_type,ore_name,ore_emoji,quantity,price_each,price_total,total_kg)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
             (seller_id, seller_username, seller_name, ore_type, ore_name,
-             ore_emoji, quantity, price_each, price_total)
+             ore_emoji, quantity, price_each, price_total, total_kg)
         )
         await db.commit()
         return cur.lastrowid
 
 
 async def get_market_listings(ore_type: str = None, limit: int = 20) -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         if ore_type:
             async with db.execute(
@@ -398,7 +438,7 @@ async def get_market_listings(ore_type: str = None, limit: int = 20) -> list:
 
 
 async def get_listing_by_id(listing_id: int) -> Optional[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM market_listings WHERE id=?", (listing_id,)) as cur:
             row = await cur.fetchone()
@@ -419,47 +459,92 @@ async def buy_market_listing(listing_id: int, buyer_id: int, buyer_username: str
     if buyer["balance"] < listing["price_total"]:
         return False, f"❌ Saldo tidak cukup. Butuh `{listing['price_total']:,}` koin.", None
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE market_listings SET status='sold', buyer_id=?, buyer_username=?, sold_at=? WHERE id=?",
-            (buyer_id, buyer_username, datetime.now().isoformat(), listing_id)
-        )
-        await db.commit()
+    # FIX: Cek kapasitas bag SEBELUM transaksi finansial, agar tidak perlu rollback
+    ore_inv_check = buyer.get("ore_inventory", {})
+    total_in_bag_check = sum(ore_inv_check.values())
+    bag_slots_check = buyer.get("bag_slots", 50)
+    if total_in_bag_check + listing["quantity"] > bag_slots_check:
+        return False, f"❌ Bag pembeli penuh! ({total_in_bag_check}/{bag_slots_check} slot). Kosongkan bag dulu.", None
 
-    # Transfer coin & ore
-    await add_balance(buyer_id, -listing["price_total"], f"Beli {listing['ore_name']} dari market")
     seller_earn = int(listing["price_total"] * 0.95)
-    await add_balance(listing["seller_id"], seller_earn, f"Jual {listing['ore_name']} di market")
-    from config import ORES
-    ore_data = ORES.get(listing["ore_type"], {})
-    avg_kg = (ore_data.get("kg_min", 0.5) + ore_data.get("kg_max", 2.0)) / 2
-    total_kg = avg_kg * listing["quantity"]
-    await add_ore_to_inventory(buyer_id, listing["ore_type"], listing["quantity"], total_kg)
+    now_iso = datetime.now().isoformat()
+
+    # FIX: Atomic transaction — update status + kurangi saldo buyer dalam satu DB transaction
+    # Sehingga jika bot crash di tengah jalan, listing tetap 'active' & saldo tidak berkurang
+    try:
+        async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+            # Cek ulang status listing dalam satu koneksi untuk mencegah race condition
+            async with db.execute(
+                "SELECT status FROM market_listings WHERE id=?", (listing_id,)
+            ) as cur:
+                row = await cur.fetchone()
+                if not row or row[0] != "active":
+                    return False, "❌ Listing sudah tidak tersedia.", None
+
+            await db.execute(
+                "UPDATE market_listings SET status='sold', buyer_id=?, buyer_username=?, sold_at=? WHERE id=? AND status='active'",
+                (buyer_id, buyer_username, now_iso, listing_id)
+            )
+            await db.execute(
+                "UPDATE users SET balance=balance-? WHERE user_id=?",
+                (listing["price_total"], buyer_id)
+            )
+            await db.execute(
+                "INSERT INTO transactions(user_id,type,amount,description) VALUES(?,?,?,?)",
+                (buyer_id, "debit", listing["price_total"], f"Beli {listing['ore_name']} dari market")
+            )
+            await db.execute(
+                "UPDATE users SET balance=balance+?, total_earned=total_earned+? WHERE user_id=?",
+                (seller_earn, seller_earn, listing["seller_id"])
+            )
+            await db.execute(
+                "INSERT INTO transactions(user_id,type,amount,description) VALUES(?,?,?,?)",
+                (listing["seller_id"], "credit", seller_earn, f"Jual {listing['ore_name']} di market")
+            )
+            await db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"buy_market_listing error listing {listing_id}: {e}")
+        return False, "❌ Terjadi kesalahan saat transaksi. Coba lagi.", None
+
+    # Tambah ore ke inventory pembeli menggunakan total_kg aktual dari listing
+    # Fallback ke avg jika listing lama tidak punya total_kg.
+    stored_kg = listing.get("total_kg", 0.0) or 0.0
+    if stored_kg <= 0.0:
+        from config import ORES
+        ore_data = ORES.get(listing["ore_type"], {})
+        avg_kg = (ore_data.get("kg_min", 0.5) + ore_data.get("kg_max", 2.0)) / 2
+        stored_kg = avg_kg * listing["quantity"]
+    await add_ore_to_inventory(buyer_id, listing["ore_type"], listing["quantity"], stored_kg)
     return True, seller_earn, listing
 
 
 async def cancel_market_listing(listing_id: int, user_id: int) -> tuple:
     listing = await get_listing_by_id(listing_id)
     if not listing:
-        return False, "❌ Listing tidak ditemukan."
+        return False, "❌ Listing tidak ditemukan.", None
     if listing["seller_id"] != user_id:
-        return False, "❌ Ini bukan listing kamu."
+        return False, "❌ Ini bukan listing kamu.", None
     if listing["status"] != "active":
-        return False, "❌ Listing sudah tidak aktif."
-    async with aiosqlite.connect(DB_PATH) as db:
+        return False, "❌ Listing sudah tidak aktif.", None
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute("UPDATE market_listings SET status='cancelled' WHERE id=?", (listing_id,))
         await db.commit()
-    # Kembalikan ore ke seller
-    from config import ORES
-    ore_data = ORES.get(listing["ore_type"], {})
-    avg_kg = (ore_data.get("kg_min", 0.5) + ore_data.get("kg_max", 2.0)) / 2
-    total_kg = avg_kg * listing["quantity"]
-    await add_ore_to_inventory(user_id, listing["ore_type"], listing["quantity"], total_kg)
-    return True, "✅ Listing berhasil dibatalkan. Ore dikembalikan."
+    # FIX #5: Gunakan total_kg yang tersimpan di listing (berat aktual saat listing dibuat)
+    # Fallback ke avg_kg estimasi hanya jika total_kg tidak ada (listing lama sebelum fix)
+    stored_kg = listing.get("total_kg", 0.0) or 0.0
+    if stored_kg <= 0.0:
+        from config import ORES
+        ore_data = ORES.get(listing["ore_type"], {})
+        avg_kg = (ore_data.get("kg_min", 0.5) + ore_data.get("kg_max", 2.0)) / 2
+        stored_kg = avg_kg * listing["quantity"]
+    await add_ore_to_inventory(user_id, listing["ore_type"], listing["quantity"], stored_kg)
+    # Kembalikan listing data agar handler tidak perlu fetch ulang setelah status berubah
+    return True, "✅ Listing berhasil dibatalkan. Ore dikembalikan.", listing
 
 
 async def get_user_market_listings(user_id: int) -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM market_listings WHERE seller_id=? AND status='active' ORDER BY listed_at DESC",
@@ -470,7 +555,7 @@ async def get_user_market_listings(user_id: int) -> list:
 
 async def get_market_daily_count(user_id: int) -> int:
     today = datetime.now().strftime("%Y-%m-%d")
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         async with db.execute(
             "SELECT count FROM market_daily_count WHERE user_id=? AND list_date=?",
             (user_id, today)
@@ -481,7 +566,7 @@ async def get_market_daily_count(user_id: int) -> int:
 
 async def increment_market_daily_count(user_id: int):
     today = datetime.now().strftime("%Y-%m-%d")
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             "INSERT INTO market_daily_count(user_id, list_date, count) VALUES(?,?,1) "
             "ON CONFLICT(user_id, list_date) DO UPDATE SET count=count+1",
@@ -491,7 +576,7 @@ async def increment_market_daily_count(user_id: int):
 
 
 async def save_admin_photo(admin_id: int, photo_id: str, caption: str = "") -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             "INSERT INTO admin_photos(admin_id,photo_id,caption) VALUES(?,?,?)",
             (admin_id, photo_id, caption)
@@ -501,7 +586,7 @@ async def save_admin_photo(admin_id: int, photo_id: str, caption: str = "") -> b
 
 
 async def get_admin_photos(admin_id: int = None) -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         if admin_id:
             async with db.execute(
@@ -515,7 +600,7 @@ async def get_admin_photos(admin_id: int = None) -> list:
 
 
 async def delete_admin_photo(photo_db_id: int, admin_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute(
             "DELETE FROM admin_photos WHERE id=? AND admin_id=?", (photo_db_id, admin_id)
         )
@@ -525,7 +610,7 @@ async def delete_admin_photo(photo_db_id: int, admin_id: int) -> bool:
 
 async def get_leaderboard(limit: int = 10, exclude_admins: bool = True) -> list:
     from config import ADMIN_IDS
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         if exclude_admins and ADMIN_IDS:
             placeholders = ",".join("?" * len(ADMIN_IDS))
@@ -545,7 +630,7 @@ async def get_leaderboard_by(field: str, limit: int = 10, exclude_admins: bool =
     allowed = {"total_earned", "mine_count", "total_kg_mined", "total_mined"}
     if field not in allowed:
         field = "total_earned"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         if exclude_admins and ADMIN_IDS:
             placeholders = ",".join("?" * len(ADMIN_IDS))
@@ -562,7 +647,7 @@ async def get_leaderboard_by(field: str, limit: int = 10, exclude_admins: bool =
 
 async def get_user_rank(user_id: int) -> int:
     from config import ADMIN_IDS
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         if ADMIN_IDS:
             placeholders = ",".join("?" * len(ADMIN_IDS))
             sql = (f"SELECT COUNT(*)+1 FROM users "
@@ -579,7 +664,7 @@ async def get_user_rank(user_id: int) -> int:
 
 
 async def get_ore_stats(user_id: int) -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT ore_type, ore_name, COUNT(*) cnt FROM mining_log "
@@ -590,7 +675,7 @@ async def get_ore_stats(user_id: int) -> list:
 
 
 async def get_all_users() -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users ORDER BY created_at DESC") as cur:
             rows = await cur.fetchall()
@@ -598,14 +683,14 @@ async def get_all_users() -> list:
 
 
 async def get_total_users() -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         async with db.execute("SELECT COUNT(*) FROM users") as cur:
             row = await cur.fetchone()
             return row[0] if row else 0
 
 
 async def set_ore_photo(ore_id: str, photo_id: str, caption: str, admin_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             "INSERT OR REPLACE INTO ore_photos(ore_id,photo_id,caption,set_by,updated_at) VALUES(?,?,?,?,?)",
             (ore_id, photo_id, caption, admin_id, datetime.now().isoformat())
@@ -615,7 +700,7 @@ async def set_ore_photo(ore_id: str, photo_id: str, caption: str, admin_id: int)
 
 
 async def get_ore_photo(ore_id: str) -> Optional[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM ore_photos WHERE ore_id=?", (ore_id,)) as cur:
             row = await cur.fetchone()
@@ -623,21 +708,21 @@ async def get_ore_photo(ore_id: str) -> Optional[dict]:
 
 
 async def get_all_ore_photos() -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM ore_photos ORDER BY updated_at DESC") as cur:
             return [dict(r) for r in await cur.fetchall()]
 
 
 async def delete_ore_photo(ore_id: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute("DELETE FROM ore_photos WHERE ore_id=?", (ore_id,))
         await db.commit()
         return cur.rowcount > 0
 
 
 async def set_tool_photo(tool_id: str, photo_id: str, caption: str, admin_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             "INSERT OR REPLACE INTO tool_photos(tool_id,photo_id,caption,set_by,updated_at) VALUES(?,?,?,?,?)",
             (tool_id, photo_id, caption, admin_id, datetime.now().isoformat())
@@ -647,7 +732,7 @@ async def set_tool_photo(tool_id: str, photo_id: str, caption: str, admin_id: in
 
 
 async def get_tool_photo(tool_id: str) -> Optional[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM tool_photos WHERE tool_id=?", (tool_id,)) as cur:
             row = await cur.fetchone()
@@ -655,21 +740,21 @@ async def get_tool_photo(tool_id: str) -> Optional[dict]:
 
 
 async def get_all_tool_photos() -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM tool_photos ORDER BY updated_at DESC") as cur:
             return [dict(r) for r in await cur.fetchall()]
 
 
 async def delete_tool_photo(tool_id: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute("DELETE FROM tool_photos WHERE tool_id=?", (tool_id,))
         await db.commit()
         return cur.rowcount > 0
 
 
 async def set_zone_photo(zone_id: str, photo_id: str, caption: str, admin_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             "INSERT OR REPLACE INTO zone_photos(zone_id,photo_id,caption,set_by,updated_at) VALUES(?,?,?,?,?)",
             (zone_id, photo_id, caption, admin_id, datetime.now().isoformat())
@@ -679,7 +764,7 @@ async def set_zone_photo(zone_id: str, photo_id: str, caption: str, admin_id: in
 
 
 async def get_zone_photo(zone_id: str) -> Optional[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM zone_photos WHERE zone_id=?", (zone_id,)) as cur:
             row = await cur.fetchone()
@@ -687,14 +772,14 @@ async def get_zone_photo(zone_id: str) -> Optional[dict]:
 
 
 async def get_all_zone_photos() -> list:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM zone_photos ORDER BY updated_at DESC") as cur:
             return [dict(r) for r in await cur.fetchall()]
 
 
 async def delete_zone_photo(zone_id: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute("DELETE FROM zone_photos WHERE zone_id=?", (zone_id,))
         await db.commit()
         return cur.rowcount > 0
@@ -755,8 +840,27 @@ async def increment_transfer_receive(user_id: int):
     user = await get_user(user_id)
     if not user:
         return
-    new_count = user.get("transfer_receive_count", 0) + 1
-    await update_user(user_id, transfer_receive_count=new_count)
+    # FIX: cek reset mingguan seperti increment_transfer_send
+    week_start = user.get("transfer_week_start")
+    now = datetime.now()
+    reset = False
+    if not week_start:
+        reset = True
+    else:
+        try:
+            ws_dt = datetime.fromisoformat(week_start)
+            if (now - ws_dt).days >= 7:
+                reset = True
+        except Exception:
+            reset = True
+    if reset:
+        await update_user(user_id,
+            transfer_receive_count=1,
+            transfer_week_start=now.isoformat()
+        )
+    else:
+        new_count = user.get("transfer_receive_count", 0) + 1
+        await update_user(user_id, transfer_receive_count=new_count)
 
 
 async def set_mining_multi_status(user_id: int, active: bool, multi_type: str = None):
@@ -774,13 +878,10 @@ async def get_weekly_leaderboard(field: str = "balance", limit: int = 10) -> lis
     allowed = {"balance", "mine_count", "total_kg", "ore_count"}
     if field not in allowed:
         field = "balance"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         if ADMIN_IDS:
             placeholders = ",".join("?" * len(ADMIN_IDS))
-            sql = (f"SELECT * FROM users WHERE user_id NOT IN ({placeholders}) "
-                   f"ORDER BY {field if field not in ('balance','mine_count') else ('total_earned' if field=='balance' else 'mine_count')} DESC LIMIT ?")
-            # Map field correctly
             real_field = {
                 "balance": "total_earned",
                 "mine_count": "mine_count",
@@ -810,7 +911,7 @@ async def get_weekly_leaderboard(field: str = "balance", limit: int = 10) -> lis
 
 async def init_admin_table():
     """Buat tabel dynamic_admins jika belum ada."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS dynamic_admins (
                 user_id     INTEGER PRIMARY KEY,
@@ -824,7 +925,7 @@ async def init_admin_table():
 
 async def add_dynamic_admin(user_id: int, added_by: int, note: str = "") -> bool:
     await init_admin_table()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         await db.execute(
             "INSERT OR IGNORE INTO dynamic_admins(user_id, added_by, note) VALUES(?,?,?)",
             (user_id, added_by, note)
@@ -835,7 +936,7 @@ async def add_dynamic_admin(user_id: int, added_by: int, note: str = "") -> bool
 
 async def remove_dynamic_admin(user_id: int) -> bool:
     await init_admin_table()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute(
             "DELETE FROM dynamic_admins WHERE user_id=?", (user_id,)
         )
@@ -845,7 +946,7 @@ async def remove_dynamic_admin(user_id: int) -> bool:
 
 async def get_dynamic_admins() -> list:
     await init_admin_table()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM dynamic_admins ORDER BY added_at DESC"
@@ -855,7 +956,7 @@ async def get_dynamic_admins() -> list:
 
 async def is_dynamic_admin(user_id: int) -> bool:
     await init_admin_table()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         async with db.execute(
             "SELECT 1 FROM dynamic_admins WHERE user_id=?", (user_id,)
         ) as cur:
@@ -864,11 +965,11 @@ async def is_dynamic_admin(user_id: int) -> bool:
 
 async def reset_all_users() -> int:
     """Reset semua data pemain ke nilai awal. Mengembalikan jumlah user yang direset."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        import json as _json
+    from config import STARTING_BALANCE
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute("""
             UPDATE users SET
-                balance               = 1000,
+                balance               = ?,
                 total_earned          = 0,
                 total_mined           = 0,
                 mine_count            = 0,
@@ -907,7 +1008,7 @@ async def reset_all_users() -> int:
                 is_mining_multi       = 0,
                 mining_multi_type     = NULL,
                 mining_multi_started  = NULL
-        """)
+        """, (int(STARTING_BALANCE),))
         # Juga bersihkan mining_log, transactions, market
         await db.execute("DELETE FROM mining_log")
         await db.execute("DELETE FROM transactions")
