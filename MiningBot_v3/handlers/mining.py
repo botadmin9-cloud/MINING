@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -43,11 +44,33 @@ async def _mine_panel(user_id: int) -> tuple:
     # Cek apakah sedang mining multi
     if user.get("is_mining_multi") and not _is_admin(user_id):
         multi_type = user.get("mining_multi_type", "?")
+        # Hitung sisa cooldown
+        last_mine = user.get("last_mine_time")
+        cd_secs = get_mine_cooldown_seconds(user, False)
+        wait_txt = ""
+        if last_mine:
+            try:
+                elapsed = (datetime.now() - datetime.fromisoformat(last_mine)).total_seconds()
+                remaining = max(0, cd_secs - elapsed)
+                if remaining > 0:
+                    h = int(remaining) // 3600
+                    m = (int(remaining) % 3600) // 60
+                    s = int(remaining) % 60
+                    if h > 0:
+                        time_str = f"{h}j {m}m {s}d"
+                    elif m > 0:
+                        time_str = f"{m}m {s}d"
+                    else:
+                        time_str = f"{s} detik"
+                    wait_txt = f"\n⏱️ Mining berikutnya dalam: `{time_str}`"
+            except Exception:
+                pass
         return (
             f"⛏️ *Sedang Mining {multi_type}...*\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"⏳ Proses mining sedang berjalan!\n"
-            f"🔄 Tidak bisa memulai mining baru hingga selesai.\n\n"
+            f"🔄 Tidak bisa memulai mining baru hingga selesai."
+            f"{wait_txt}\n\n"
             f"💡 Harap tunggu hingga mining {multi_type} selesai."
         ), None
 
@@ -71,7 +94,17 @@ async def _mine_panel(user_id: int) -> tuple:
                 elapsed = (datetime.now() - datetime.fromisoformat(last_mine)).total_seconds()
                 remaining = cooldown - elapsed
                 if remaining > 0:
-                    cooldown_status = f"\n⏳ *Siap mining dalam: `{remaining:.1f}` detik*"
+                    r_int = int(remaining)
+                    h = r_int // 3600
+                    m = (r_int % 3600) // 60
+                    s = r_int % 60
+                    if h > 0:
+                        time_str = f"{h}j {m}m {s}d"
+                    elif m > 0:
+                        time_str = f"{m}m {s}d"
+                    else:
+                        time_str = f"{s} detik"
+                    cooldown_status = f"\n⏳ *Siap mining dalam: `{time_str}`*"
                 else:
                     cooldown_status = "\n✅ *Siap mining sekarang!*"
             except Exception:
@@ -178,6 +211,20 @@ async def cb_do_mine(callback: CallbackQuery):
     await callback.answer()
 
 
+def _format_duration(seconds: float) -> str:
+    """Format detik ke format jam:menit:detik yang mudah dibaca."""
+    seconds = max(0, int(seconds))
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h > 0:
+        return f"{h}j {m}m {s}d"
+    elif m > 0:
+        return f"{m}m {s}d"
+    else:
+        return f"{s} detik"
+
+
 async def _do_mine_multi(callback: CallbackQuery, count: int):
     uid = callback.from_user.id
     is_admin = _is_admin(uid)
@@ -197,19 +244,29 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
         return
 
     multi_label = f"x{count}"
+
+    # Hitung estimasi total waktu tunggu
+    cd_secs = get_mine_cooldown_seconds(user, is_admin)
+    total_wait_secs = cd_secs * (count - 1) if not is_admin else 0
+    eta_str = _format_duration(total_wait_secs) if total_wait_secs > 0 else "Sebentar"
+
     await callback.answer(f"⛏️ Mining {multi_label}... Harap tunggu!")
 
     # Set status mining multi
     if not is_admin:
         await set_mining_multi_status(uid, True, multi_label)
 
-    # Update pesan awal
+    start_time = time.time()
+
+    # Update pesan awal dengan estimasi waktu
     try:
         await callback.message.edit_text(
             f"⛏️ *Sedang Mining {multi_label}...*\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"⏳ Proses mining sedang berjalan...\n"
             f"🔄 Tidak bisa memulai mining baru hingga selesai.\n\n"
+            f"🕐 *Estimasi waktu:* `{eta_str}`\n"
+            f"⏱️ Cooldown per mine: `{cd_secs}` detik\n\n"
             f"💡 Harap tunggu dengan sabar!",
             reply_markup=None,
             parse_mode="Markdown"
@@ -230,11 +287,9 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
             user = await get_user(uid)
             if not user:
                 break
-            if not is_admin:
-                can_mine, _ = await check_mine_cooldown(user, is_admin)
-                if not can_mine:
-                    cd = get_mine_cooldown_seconds(user, is_admin)
-                    await asyncio.sleep(cd)
+            # FIX bug double-sleep: cek cooldown di sini dihapus.
+            # asyncio.sleep sudah ada di akhir loop, sehingga tidak
+            # perlu cek ulang di sini (akibat: 2x cooldown per mine).
 
             r = await perform_mine(uid, is_admin=is_admin)
             if not r["ok"]:
@@ -251,7 +306,7 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
             new_ach.extend(r.get("new_achievements", []))
 
             if not is_admin and i < count - 1:
-                # FIX: Gunakan cooldown_secs dari result (sudah hitung buff terkini)
+                # Gunakan cooldown_secs dari result (sudah hitung buff terkini)
                 cd = r.get("cooldown_secs") or get_mine_cooldown_seconds(user, is_admin)
                 await asyncio.sleep(cd)
     except Exception as _e:
