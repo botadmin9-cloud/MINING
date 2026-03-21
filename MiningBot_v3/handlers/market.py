@@ -172,7 +172,8 @@ async def cb_market_buy_detail(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("market_confirm_buy_"))
 async def cb_market_confirm_buy(callback: CallbackQuery):
     listing_id = int(callback.data.replace("market_confirm_buy_", ""))
-    buyer_username = callback.from_user.username or callback.from_user.first_name
+    # FIX Bug 2: Pastikan buyer_username tidak pernah None
+    buyer_username = callback.from_user.username or callback.from_user.first_name or str(callback.from_user.id)
 
     ok, seller_earn, listing = await buy_market_listing(listing_id, callback.from_user.id, buyer_username)
     if ok:
@@ -189,7 +190,7 @@ async def cb_market_confirm_buy(callback: CallbackQuery):
             f"🆔 ID Kamu     : `{callback.from_user.id}`"
         )
         # FIX #9: Notifikasi ke channel saat terjual
-        buyer_name = callback.from_user.username or callback.from_user.first_name
+        buyer_name = callback.from_user.username or callback.from_user.first_name or str(callback.from_user.id)
         channel_sold = (
             f"✅ <b>ORE TERJUAL DI MARKET!</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -405,7 +406,6 @@ async def process_sell_price(message: Message, state: FSMContext):
             return
 
     # Hitung total KG aktual sebelum dikurangi (FIX #5: simpan untuk cancel yang akurat)
-    uid = message.from_user.id
     user = await get_user(uid)
     ore_kg_data = user.get("ore_kg_data", {}) if user else {}
     ore_qty_owned = user.get("ore_inventory", {}).get(data["ore_id"], 0) if user else 0
@@ -511,7 +511,7 @@ async def cb_market_cancel(callback: CallbackQuery):
     if ok:
         # FIX: gunakan listing_info yang dikembalikan langsung (sudah ada sebelum di-cancel)
         if listing_info:
-            seller_name = callback.from_user.username or callback.from_user.first_name
+            seller_name = callback.from_user.username or callback.from_user.first_name or str(callback.from_user.id)
             channel_cancel = (
                 f"❌ <b>LISTING DIBATALKAN</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
