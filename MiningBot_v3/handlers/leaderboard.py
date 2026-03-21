@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from config import ADMIN_IDS
+from config import ADMIN_IDS, format_kg
 from database import get_leaderboard_by, get_user_rank, get_user
 from keyboards import leaderboard_kb
 
@@ -66,7 +66,6 @@ async def cb_lb_switch(callback: CallbackQuery):
 
 
 async def _build_lb(user_id: int, field: str = "balance", period: str = "weekly") -> str:
-    from database import get_leaderboard_by
     db_field = LB_FIELDS.get(field, ("💰 Total Saldo", "total_earned"))[1]
     label    = LB_FIELDS.get(field, ("💰 Total Saldo", "total_earned"))[0]
     leaders  = await get_leaderboard_by(db_field, 10)
@@ -85,7 +84,6 @@ async def _build_lb(user_id: int, field: str = "balance", period: str = "weekly"
         rebirth = f" 🔄{p['rebirth_count']}" if p.get("rebirth_count", 0) > 0 else ""
         value = p.get(db_field, 0)
         if db_field == "total_kg_mined":
-            from config import format_kg
             val_str = format_kg(value)
         else:
             val_str = f"{int(value):,}"
