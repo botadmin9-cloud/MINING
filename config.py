@@ -3,8 +3,13 @@ import random
 from dotenv import load_dotenv
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8423250634:AAFY0bMwALbw3N7s-vwD4WAYujruhMSA44w")
-_raw_admins = os.getenv("ADMIN_IDS", "577381,7573097201")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN tidak ditemukan! Isi BOT_TOKEN di file .env")
+
+_raw_admins = os.getenv("ADMIN_IDS", "")
+if not _raw_admins:
+    raise ValueError("❌ ADMIN_IDS tidak ditemukan! Isi ADMIN_IDS di file .env (contoh: 123456789)")
 # Admin tetap dari .env
 STATIC_ADMIN_IDS: list[int] = [int(x.strip()) for x in _raw_admins.split(",") if x.strip().isdigit()]
 # ADMIN_IDS adalah alias (bisa diperluas runtime oleh get_all_admin_ids)
@@ -27,18 +32,18 @@ async def get_all_admin_ids() -> list[int]:
 DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
 
 # FIX #9: Channel Telegram untuk notifikasi market
-MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "https://t.me/miningmarketsell")  # isi di .env, contoh: -1001234567890
+MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env dgn integer ID, contoh: -1001234567890
 
 # Link channel & grup official (isi di .env)
-OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "https://t.me/miningholic")  # contoh: https://t.me/yourchannel
-OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "https://t.me/miningholiic")    # contoh: https://t.me/yourgroup
+OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "")  # Isi di .env, contoh: https://t.me/yourchannel
+OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "")    # Isi di .env, contoh: https://t.me/yourgroup
 
 
 STARTING_BALANCE        = 1000
 DAILY_BONUS_BASE        = 500
 DAILY_BONUS_LEVEL       = 25
 ENERGY_REGEN_RATE       = 50       # energy per regen tick
-ENERGY_COOLDOWN_MINUTES = 2        # ✅ Lebih cepat: 5 menit (dari 10)
+ENERGY_COOLDOWN_MINUTES = 2        # ✅ Lebih cepat: 2 menit per regen tick
 MAX_ENERGY_BASE         = 500
 XP_BASE_MULTIPLIER      = 1
 KG_PRICE_MULTIPLIER     = 0.02   # ✅ Diturunkan: harga jual ore lebih murah
@@ -48,12 +53,6 @@ BAG_SLOT_DEFAULT        = 50
 BAG_SLOT_MAX            = 500
 BAG_SLOT_STEP           = 10
 BAG_SLOT_BASE_COST      = 200000
-
-# ── Bag KG Upgrade ──────────────────────────────────────────────
-BAG_KG_MAX              = 999999.0
-BAG_KG_UPGRADE_STEP     = 10.0
-BAG_KG_UPGRADE_COST     = 100000
-
 
 # ── Energy Upgrade ────────────────────────────────────────────
 ENERGY_UPGRADE_MAX       = 5000
@@ -73,8 +72,8 @@ VIP_PRICES = {
     "6_months": {"label": "14 Hari",  "price": 25000, "days": 14},
     "lifetime": {"label": "1 Bulan", "price": 50000, "days": 30},
 }
-VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
-TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO", "Bank SEABANK: 901919719088 Erik Martin")
+VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO", "Isi info rekening di .env (VIP_TRANSFER_INFO)")
+TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO", "Isi info rekening di .env (TOPUP_TRANSFER_INFO)")
 TOPUP_RATE = 1000  # 1 IDR = 1000 koin (contoh)
 
 # FIX #10: Transfer ore config
@@ -268,8 +267,6 @@ ORES: dict = {
     "chaos_fragment":   {"name":"🌪️ Serpihan Chaos",         "emoji":"🌪️","value":100000000,"rarity":0.000002, "xp":4500000,  "kg_min":0.15,    "kg_max":1500.0,   "desc":"Serpihan dari kekuatan chaos primordial.",                       "tier":"divine"},
 }
 
-KG_PRICE_MULTIPLIER = 0.02   # ✅ Diturunkan: harga jual ore lebih murah
-
 def calculate_sell_price(ore_id: str, kg_weight: float) -> int:
     ore = ORES.get(ore_id, {})
     base_value = ore.get("value", 1)
@@ -303,13 +300,8 @@ ITEMS: dict = {
     "divine_luck_orb":    {"name":"🔮 Divine Luck Orb",             "emoji":"🔮","price":550000,     "description":"+50% luck selama 10 menit!",                                          "effect":{"luck_buff":1.0,"duration":20},                  "stackable":True},
     "xp_mega_boost":      {"name":"🌠 XP Mega Boost",               "emoji":"🌠","price":700000,      "description":"5x XP selama 10 menit!",                                               "effect":{"xp_mult":5.0,"duration":20},                    "stackable":True},
     "speed_boost":        {"name":"🚀 Speed Boost",                  "emoji":"🚀","price":600000,      "description":"Cooldown mining -50% selama 10 menit.",                                "effect":{"speed_boost":0.5,"duration":20},                "stackable":True},
-    "mystery_box":        {"name":"📦 Mystery Box",                  "emoji":"📦","price":500000,      "description":"Kotak misterius! Isi acak bisa XP, item, atau ore.",                    "effect":{"mystery":True},                                 "stackable":True},
     "premium_mystery_box":{"name":"🎁 Premium Mystery Box",          "emoji":"🎁","price":1500000,     "description":"Kotak premium! Dijamin item/ore berharga.",                              "effect":{"mystery_premium":True},                         "stackable":True},
     "divine_box":         {"name":"✨ Divine Mystery Box",            "emoji":"✨","price":3500000,     "description":"Kotak surgawi! Kemungkinan ore mythical-divine!",                        "effect":{"mystery_divine":True},                          "stackable":True},
-    "luck_elixir":        {"name":"🍀 Luck Elixir",               "emoji":"🍀","price":300000,      "description":"+25% luck selama 10 menit.",                  "effect":{"luck_buff":0.5,"duration":20},   "stackable":True},
-    "mega_luck_potion":   {"name":"🌠 Mega Luck Potion",            "emoji":"🌠","price":800000,      "description":"+100% luck selama 10 menit!",                  "effect":{"luck_buff":1.5,"duration":20},   "stackable":True},
-    "xp_boost":           {"name":"⭐ XP Boost",                    "emoji":"⭐","price":250000,      "description":"2x XP selama 10 menit.",                      "effect":{"xp_mult":2.0,"duration":20},     "stackable":True},
-    "weight_enhancer":    {"name":"⚖️ Weight Enhancer",             "emoji":"⚖️","price":400000,     "description":"Ore 2x lebih berat selama 10 menit.",          "effect":{"kg_boost":2.0,"duration":20},    "stackable":True},
     "rebirth_token":      {"name":"🔄 Rebirth Token",                "emoji":"🔄","price":7500000,    "description":"Reset level ke 1. Bonus permanen: +50% XP selamanya!",                  "effect":{"rebirth":True},                                 "stackable":False},
 }
 
@@ -388,4 +380,5 @@ ZONES: dict = {
 TIER_COLORS = {1:"⚪️",2:"🟢",3:"🔵",4:"🟠",5:"🔴",6:"💜",7:"🌟",8:"🌈"}
 ORE_TIER_COLORS = {"common":"⚪️","uncommon":"🟢","rare":"🔵","epic":"🟠","legendary":"🔴","mythical":"💜","cosmic":"🌟","divine":"🌈"}
 
-MARKET_FEE_PERCENT = 5
+MARKET_FEE_PERCENT  = 5
+MARKET_DAILY_LIMIT  = 3   # Maksimal listing per hari per user (non-admin)
