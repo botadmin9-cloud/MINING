@@ -47,7 +47,23 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.clear()
 
     existing = await get_user(uid)
-    if not existing:
+
+    # BUG FIX: AutoRegisterMiddleware creates the user BEFORE cmd_start runs,
+    # so 'existing' is never None for truly new users. We detect a "just-created"
+    # user by checking whether display_name is still the default (== first_name or empty),
+    # AND the user has never mined (mine_count == 0) and has not changed their name yet.
+    # In that case, re-enter the name-setup flow as if they are brand new.
+    is_brand_new = (
+        existing is not None
+        and existing.get("mine_count", 0) == 0
+        and existing.get("last_name_change") is None
+        and (
+            not existing.get("display_name")
+            or existing.get("display_name") == existing.get("first_name", "")
+        )
+    )
+
+    if not existing or is_brand_new:
         await state.set_state(RegisterState.waiting_username)
         await state.update_data(uid=uid, uname=uname, fname=fname)
         await message.answer(
@@ -169,6 +185,42 @@ async def _finish_register(message: Message, uid: int, uname: str,
             reply_markup=_official_links_kb(),
             parse_mode="Markdown"
         )
+
+
+@router.message(F.text == "👥 Gabung Grup")
+async def btn_gabung_grup(message: Message):
+    from config import OFFICIAL_GROUP
+    if not OFFICIAL_GROUP:
+        await message.answer("ℹ️ Link grup belum dikonfigurasi.", parse_mode="Markdown")
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👥 Gabung Grup Sekarang", url=OFFICIAL_GROUP)]
+    ])
+    await message.answer(
+        "👥 *Gabung Grup Official Mining Bot!*\n\n"
+        "Diskusi, tanya jawab, dan info update game ada di sini.\n"
+        "Klik tombol di bawah untuk bergabung:",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+
+
+@router.message(F.text == "📢 Gabung Channel")
+async def btn_gabung_channel(message: Message):
+    from config import OFFICIAL_CHANNEL
+    if not OFFICIAL_CHANNEL:
+        await message.answer("ℹ️ Link channel belum dikonfigurasi.", parse_mode="Markdown")
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Gabung Channel Sekarang", url=OFFICIAL_CHANNEL)]
+    ])
+    await message.answer(
+        "📢 *Gabung Channel Official Mining Bot!*\n\n"
+        "Dapatkan info update, event, tips mining, dan pengumuman terbaru.\n"
+        "Klik tombol di bawah untuk bergabung:",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
 
 
 @router.callback_query(F.data == "close_welcome")
