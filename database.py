@@ -210,7 +210,7 @@ async def init_db():
                 await db.execute(col_sql)
             except Exception:
                 pass
-        await db.execute("UPDATE users SET bag_kg_max=100.0 WHERE bag_kg_max < 1.0 OR bag_kg_max > 1000.0 OR bag_kg_max IS NULL")
+        await db.execute("UPDATE users SET bag_kg_max=100.0 WHERE bag_kg_max < 1.0 OR bag_kg_max IS NULL")
         # FIX #5: Tambah kolom total_kg di market_listings jika belum ada
         try:
             await db.execute("ALTER TABLE market_listings ADD COLUMN total_kg REAL DEFAULT 0.0")
@@ -351,6 +351,8 @@ async def add_ore_to_inventory(user_id: int, ore_id: str, qty: int = 1, kg: floa
     kg_data[ore_id] = round(kg_data.get(ore_id, 0.0) + kg, 2)
     raw_kg_used = user.get("bag_kg_used", 0.0) + kg
     bag_kg_max  = user.get("bag_kg_max", 100.0)
+    # FIX Bug #5: cap bag_kg_used ke bag_kg_max, tapi ore_kg_data tetap
+    # menyimpan total KG asli agar kalkulasi sell price tetap akurat
     bag_kg_used = round(min(raw_kg_used, bag_kg_max), 2)
     updates = dict(ore_inventory=inv, ore_kg_data=kg_data, bag_kg_used=bag_kg_used)
     if increment_mine_count:
