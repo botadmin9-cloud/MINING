@@ -51,9 +51,11 @@ def energy_full_in(user: dict) -> str:
     if user["energy"] >= user["max_energy"]:
         return "✅ PENUH"
     needed = user["max_energy"] - user["energy"]
-    # FIX Bug #8b: tiap tick mengisi ENERGY_REGEN_RATE energy, bukan 1
     import math
-    ticks_needed = math.ceil(needed / ENERGY_REGEN_RATE)
+    from config import VIP_ENERGY_REGEN_BONUS
+    # FIX Bug #4: hitung regen per tick termasuk VIP bonus jika aktif
+    regen_per_tick = ENERGY_REGEN_RATE + (VIP_ENERGY_REGEN_BONUS if is_vip_active(user) else 0)
+    ticks_needed = math.ceil(needed / regen_per_tick)
     total_mins = ticks_needed * ENERGY_COOLDOWN_MINUTES
     h, m = divmod(int(total_mins), 60)
     return f"{h}j {m}m" if h else f"{m}m"
@@ -99,8 +101,17 @@ async def check_mine_cooldown(user: dict, is_admin: bool = False) -> Tuple[bool,
         cooldown = get_mine_cooldown_seconds(user, is_admin)
         elapsed = (datetime.now() - last_dt).total_seconds()
         if elapsed < cooldown:
-            remaining = cooldown - elapsed
-            return False, f"⏰ Cooldown: tunggu *{remaining:.1f}* detik lagi!"
+            remaining = int(cooldown - elapsed)
+            h = remaining // 3600
+            m = (remaining % 3600) // 60
+            s = remaining % 60
+            if h > 0:
+                time_str = f"{h}j {m}m {s}d"
+            elif m > 0:
+                time_str = f"{m}m {s}d"
+            else:
+                time_str = f"{s} detik"
+            return False, f"⏰ Cooldown: tunggu *{time_str}* lagi!"
     except Exception:
         pass
     return True, ""
@@ -250,7 +261,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     xp_mult  = get_buff_val(buffs, "xp_mult", 1.0) or 1.0
     perm_xp_mult = user.get("perm_xp_mult", 1.0) or 1.0  # permanent XP dari rebirth
     tool_xp_bonus = tool.get("xp_bonus", 1.0)
-    zone_xp_bonus = zone.get("xp_bonus", 1.0)  # zona yang lebih dalam = XP lebih banyak
+    zone_xp_bonus = zone.get("kg_bonus", 1.0)  # zona lebih dalam = kg_bonus lebih tinggi = XP lebih banyak
 
     # XP dasar dari ore, dikalikan semua bonus
     base_xp = ore["xp"]
@@ -436,11 +447,19 @@ def build_mine_result_text(r: dict) -> str:
             lines.append(f"🏅 *Prestasi baru: {ach['name']}* (+{ach['reward']:,}🪙)")
 
     lines.append(f"")
-    # Tambah info cooldown berikutnya
-    last_mine_time = r.get("last_mine_time_str", "")
-    cooldown_secs  = r.get("cooldown_secs", 0)
+    # Tambah info cooldown berikutnya dalam format jam/menit/detik
+    cooldown_secs = r.get("cooldown_secs", 0)
     if cooldown_secs > 0:
-        lines.append(f"⏱️ Cooldown berikutnya: `{cooldown_secs}` detik")
+        h = cooldown_secs // 3600
+        m = (cooldown_secs % 3600) // 60
+        s = cooldown_secs % 60
+        if h > 0:
+            cd_str = f"{h}j {m}m {s}d"
+        elif m > 0:
+            cd_str = f"{m}m {s}d"
+        else:
+            cd_str = f"{s} detik"
+        lines.append(f"⏱️ Mining berikutnya dalam: `{cd_str}`")
     lines.append(f"💡 Jual ore di 🎒 *Bag* atau 🛒 *Market*!")
 
     return "\n".join(lines)
@@ -692,18 +711,8 @@ async def use_item(user_id: int, item_id: str) -> Tuple[bool, str]:
         updates["energy"] = new_e
         msg_lines.append(f"⚡ Energy: `{user['energy']} → {new_e}/{user['max_energy']}`")
 
-    elif "mystery_divine" in effect:
-        # Harus dicek SEBELUM "mystery" dan "mystery_premium" karena
-        # "mystery" in {"mystery_divine": True} == True (false match)
-        reward = _mystery_box_reward(premium=True, divine=True)
-        msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
-
-    elif "mystery_premium" in effect:
-        reward = _mystery_box_reward(premium=True)
-        msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
-
     elif "mystery" in effect:
-        reward = _mystery_box_reward(premium=False)
+        reward = _mystery_box_reward()
         msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
 
     elif "bag_expand" in effect:
@@ -791,53 +800,20 @@ async def _apply_mystery_reward(user_id: int, user: dict, reward: dict) -> list:
     return lines
 
 
-def _mystery_box_reward(premium: bool = False, divine: bool = False) -> dict:
-    if divine:
-        roll = random.random()
-        mythical_ores = ["dragonstone","stardust","phoenix_ash","lunar_crystal","void_shard","dragon_heart","leviathan_scale","thunder_stone","glacial_shard","cursed_gem"]
-        cosmic_ores = ["cosmic_dust","nebula_ore","time_crystal","dark_energy_ore","pulsar_fragment","quasar_crystal","antimatter_shard","neutron_core","singularity_ore","gamma_crystal"]
-        divine_ores = ["soul_fragment","eternity_stone","universe_core","god_tear","creation_spark","omega_shard","infinity_gem"]
-        if roll < 0.45:
-            return {"type": "ore", "ore_id": random.choice(mythical_ores)}
-        elif roll < 0.72:
-            return {"type": "ore", "ore_id": random.choice(cosmic_ores)}
-        elif roll < 0.87:
-            return {"type": "ore", "ore_id": random.choice(divine_ores)}
-        elif roll < 0.95:
-            amount = random.randint(500000, 5000000)
-            return {"type": "coins", "amount": amount}
-        else:
-            amount = random.randint(100000, 1000000)
-            return {"type": "xp", "amount": amount}
-    if premium:
-        roll = random.random()
-        if roll < 0.40:
-            items_list = ["xp_mega_boost", "divine_luck_orb", "speed_boost", "mana_crystal"]
-            return {"type": "item", "item_id": random.choice(items_list)}
-        elif roll < 0.70:
-            amount = random.randint(10000, 100000)
-            return {"type": "xp", "amount": amount}
-        elif roll < 0.90:
-            amount = random.randint(5000, 50000)
-            return {"type": "coins", "amount": amount}
-        else:
-            # Rare ore dari premium box
-            rare_ores = ["diamond", "amethyst", "opal", "mythril"]
-            return {"type": "ore", "ore_id": random.choice(rare_ores)}
+def _mystery_box_reward() -> dict:
+    roll = random.random()
+    if roll < 0.55:
+        amount = random.randint(1000, 15000)
+        return {"type": "xp", "amount": amount}
+    elif roll < 0.80:
+        amount = random.randint(500, 5000)
+        return {"type": "coins", "amount": amount}
+    elif roll < 0.95:
+        items_list = ["energy_drink", "energy_potion", "mana_crystal", "speed_boost"]
+        return {"type": "item", "item_id": random.choice(items_list)}
     else:
-        roll = random.random()
-        if roll < 0.55:
-            amount = random.randint(1000, 15000)
-            return {"type": "xp", "amount": amount}
-        elif roll < 0.80:
-            amount = random.randint(500, 5000)
-            return {"type": "coins", "amount": amount}
-        elif roll < 0.95:
-            items_list = ["energy_drink", "energy_potion", "mana_crystal", "speed_boost"]
-            return {"type": "item", "item_id": random.choice(items_list)}
-        else:
-            rare_ores = ["sapphire", "emerald", "ruby", "topaz"]
-            return {"type": "ore", "ore_id": random.choice(rare_ores)}
+        rare_ores = ["sapphire", "emerald", "ruby", "topaz"]
+        return {"type": "ore", "ore_id": random.choice(rare_ores)}
 
 
 # ══════════════════════════════════════════════════════════════
