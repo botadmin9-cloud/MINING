@@ -13,7 +13,8 @@ from aiogram.fsm.state import State, StatesGroup
 from config import ORES, ADMIN_IDS, TRANSFER_ORE_MAX_SEND_WEEKLY, TRANSFER_ORE_MAX_RECEIVE_WEEKLY
 from database import (get_user, update_user, add_ore_to_inventory,
                       remove_ore_from_inventory, get_transfer_week_counts,
-                      increment_transfer_send, increment_transfer_receive)
+                      increment_transfer_send, increment_transfer_receive,
+                      is_dynamic_admin)
 from keyboards import back_main_kb
 
 router = Router()
@@ -26,8 +27,11 @@ class TransferOreState(StatesGroup):
     waiting_confirm   = State()
 
 
-def _is_admin(uid: int) -> bool:
-    return uid in ADMIN_IDS
+async def _is_admin(uid: int) -> bool:
+    """Cek admin statis (.env) ATAU dinamis (DB)."""
+    if uid in ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(uid)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -52,7 +56,7 @@ async def cmd_transfer(message: Message, state: FSMContext):
     counts = await get_transfer_week_counts(message.from_user.id)
     send_left = TRANSFER_ORE_MAX_SEND_WEEKLY - counts["send"]
 
-    if send_left <= 0 and not _is_admin(message.from_user.id):
+    if send_left <= 0 and not await _is_admin(message.from_user.id):
         await message.answer(
             f"⛔ *Batas Transfer Mingguan Tercapai!*\n\n"
             f"Kamu sudah mengirim {TRANSFER_ORE_MAX_SEND_WEEKLY}x transfer minggu ini.\n"
@@ -78,10 +82,13 @@ async def cmd_transfer(message: Message, state: FSMContext):
 @router.callback_query(F.data == "transfer_cancel")
 async def cb_transfer_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text(
-        "❌ Transfer dibatalkan.",
-        reply_markup=back_main_kb()
-    )
+    try:
+        await callback.message.edit_text(
+            "❌ Transfer dibatalkan.",
+            reply_markup=back_main_kb()
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -110,7 +117,7 @@ async def process_transfer_target(message: Message, state: FSMContext):
     # Cek batas terima mingguan penerima
     target_counts = await get_transfer_week_counts(target_id)
     receive_left = TRANSFER_ORE_MAX_RECEIVE_WEEKLY - target_counts["receive"]
-    if receive_left <= 0 and not _is_admin(message.from_user.id):
+    if receive_left <= 0 and not await _is_admin(message.from_user.id):
         target_name = target_user.get("display_name") or target_user.get("first_name", "User")
         await message.answer(
             f"⛔ *Penerima sudah mencapai batas!*\n\n"
@@ -167,15 +174,18 @@ async def cb_transfer_ore_select(callback: CallbackQuery, state: FSMContext):
                              ore_emoji=ore["emoji"], qty_have=qty_have)
     await state.set_state(TransferOreState.waiting_qty)
 
-    await callback.message.edit_text(
-        f"📦 Ore dipilih: {ore['emoji']} *{ore['name']}*\n"
-        f"Kamu punya: `{qty_have}` buah\n\n"
-        f"Ketik jumlah yang ingin ditransfer (1 - {qty_have}):",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Batal", callback_data="transfer_cancel")]
-        ])
-    )
+    try:
+        await callback.message.edit_text(
+            f"📦 Ore dipilih: {ore['emoji']} *{ore['name']}*\n"
+            f"Kamu punya: `{qty_have}` buah\n\n"
+            f"Ketik jumlah yang ingin ditransfer (1 - {qty_have}):",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Batal", callback_data="transfer_cancel")]
+            ])
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -224,7 +234,7 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
     ore_name   = data["ore_name"]
     ore_emoji  = data["ore_emoji"]
     target_name = data["target_name"]
-    is_admin   = _is_admin(sender_id)
+    is_admin   = await _is_admin(sender_id)
 
     await state.clear()
 
@@ -245,16 +255,40 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
             await callback.answer("⛔ Penerima sudah mencapai batas terima!", show_alert=True)
             return
 
+    # FIX: Cek kapasitas bag penerima sebelum eksekusi transfer
+    target_user = await get_user(target_id)
+    if not target_user:
+        await callback.answer("❌ Penerima tidak ditemukan!", show_alert=True)
+        return
+    if not is_admin:
+        target_ore_inv = target_user.get("ore_inventory", {})
+        target_bag_used = sum(target_ore_inv.values())
+        target_bag_slots = target_user.get("bag_slots", 50)
+        if target_bag_used + qty > target_bag_slots:
+            await callback.answer(
+                f"❌ Bag penerima penuh! ({target_bag_used}/{target_bag_slots} slot). "
+                f"Tidak bisa menerima {qty} ore lagi.",
+                show_alert=True
+            )
+            return
+
     # Eksekusi transfer
     removed = await remove_ore_from_inventory(sender_id, ore_id, qty)
     if not removed:
         await callback.answer("❌ Gagal mengurangi ore!", show_alert=True)
         return
 
-    # Hitung KG yang ikut ditransfer (rata-rata berat)
-    from config import ORES as _ORES, get_random_kg as _grkg
-    _ore_data = _ORES.get(ore_id, {})
-    _avg_kg = round((_ore_data.get("kg_min", 0.5) + _ore_data.get("kg_max", 2.0)) / 2 * qty, 2)
+    # Hitung KG yang ikut ditransfer (gunakan berat aktual dari ore_kg_data jika ada)
+    _ore_kg_data = sender.get("ore_kg_data", {})
+    _total_sender_kg = _ore_kg_data.get(ore_id, 0.0)
+    _sender_qty_before = sender.get("ore_inventory", {}).get(ore_id, 0)
+    if _total_sender_kg > 0 and _sender_qty_before > 0:
+        # Gunakan berat rata-rata aktual milik sender
+        _avg_kg = round((_total_sender_kg / _sender_qty_before) * qty, 4)
+    else:
+        # Fallback ke rata-rata berdasarkan config
+        _ore_data = ORES.get(ore_id, {})
+        _avg_kg = round((_ore_data.get("kg_min", 0.5) + _ore_data.get("kg_max", 2.0)) / 2 * qty, 4)
     await add_ore_to_inventory(target_id, ore_id, qty, _avg_kg)
 
     # Update hitungan (skip untuk admin)
@@ -286,15 +320,18 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
     send_used = counts_after["send"] if not is_admin else 0
     send_left = max(0, TRANSFER_ORE_MAX_SEND_WEEKLY - send_used)
 
-    await callback.message.edit_text(
-        f"✅ *Transfer Berhasil!*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{ore_emoji} *{ore_name}* x{qty}\n"
-        f"👤 Dikirim ke: *{target_name}*\n\n"
-        f"📊 Sisa kirim minggu ini: *{send_left}x*",
-        parse_mode="Markdown",
-        reply_markup=back_main_kb()
-    )
+    try:
+        await callback.message.edit_text(
+            f"✅ *Transfer Berhasil!*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{ore_emoji} *{ore_name}* x{qty}\n"
+            f"👤 Dikirim ke: *{target_name}*\n\n"
+            f"📊 Sisa kirim minggu ini: *{send_left}x*",
+            parse_mode="Markdown",
+            reply_markup=back_main_kb()
+        )
+    except Exception:
+        pass
     await callback.answer("✅ Transfer berhasil!")
 
 
