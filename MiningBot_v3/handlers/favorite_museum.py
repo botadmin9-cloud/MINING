@@ -3,7 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import Command
 
 from config import ORES, ADMIN_IDS
-from database import get_user, update_user, get_ore_photo
+from database import get_user, update_user, get_ore_photo, is_dynamic_admin
 from keyboards import back_main_kb
 
 router = Router()
@@ -12,8 +12,10 @@ FAV_MAX    = 150
 MUSEUM_MAX = 30
 
 
-def _is_admin(uid: int) -> bool:
-    return uid in ADMIN_IDS
+async def _is_admin(uid: int) -> bool:
+    if uid in ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(uid)
 
 
 # ══════════════════════════════════════════════════════════════
