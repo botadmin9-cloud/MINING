@@ -9,15 +9,25 @@ from config import TOOLS, ITEMS, ZONES, TIER_COLORS
 # MAIN MENU
 # ══════════════════════════════════════════════════════════════
 def main_menu_kb() -> ReplyKeyboardMarkup:
+    from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
+    keyboard = [
+        [KeyboardButton(text="⛏️ Mining"),        KeyboardButton(text="👤 Profil")],
+        [KeyboardButton(text="🔧 Equipment"),      KeyboardButton(text="🎁 Inventaris")],  # FIX: 🎒→🔧 (duplikat emoji)
+        [KeyboardButton(text="🏪 Shop"),            KeyboardButton(text="🏆 Leaderboard")],
+        [KeyboardButton(text="📅 Daily"),           KeyboardButton(text="🛒 Market")],      # FIX: 🎁→📅 (duplikat emoji)
+        [KeyboardButton(text="🎒 Bag"),             KeyboardButton(text="⭐ Favorit")],
+        [KeyboardButton(text="🏛️ Museum"),          KeyboardButton(text="❓ Bantuan")],
+    ]
+    # Tampilkan tombol komunitas hanya jika dikonfigurasi
+    community_row = []
+    if OFFICIAL_GROUP:
+        community_row.append(KeyboardButton(text="👥 Gabung Grup"))
+    if OFFICIAL_CHANNEL:
+        community_row.append(KeyboardButton(text="📢 Gabung Channel"))
+    if community_row:
+        keyboard.append(community_row)
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="⛏️ Mining"),      KeyboardButton(text="👤 Profil")],
-            [KeyboardButton(text="🎒 Equipment"),    KeyboardButton(text="🎁 Inventaris")],
-            [KeyboardButton(text="🏪 Shop"),          KeyboardButton(text="🏆 Leaderboard")],
-            [KeyboardButton(text="🎁 Daily"),         KeyboardButton(text="🛒 Market")],
-            [KeyboardButton(text="🎒 Bag"),           KeyboardButton(text="⭐ Favorit")],
-            [KeyboardButton(text="🏛️ Museum"),        KeyboardButton(text="❓ Bantuan")],
-        ],
+        keyboard=keyboard,
         resize_keyboard=True,
         input_field_placeholder="Pilih menu..."
     )
@@ -368,19 +378,20 @@ def leaderboard_kb(period: str = "weekly", field: str = "balance") -> InlineKeyb
         return InlineKeyboardButton(text=f"{mark}{label}", callback_data=f"lb_{p}_{f}")
 
     return InlineKeyboardMarkup(inline_keyboard=[
-        # Period selector
+        # Period selector — BUG FIX: preserve current field when switching period
+        # (previously hardcoded to 'balance', so switching period always reset field)
         [
             InlineKeyboardButton(
                 text=("📅 ✅Weekly" if period == "weekly" else "📅 Weekly"),
-                callback_data="lb_weekly_balance"
+                callback_data=f"lb_weekly_{field}"
             ),
             InlineKeyboardButton(
                 text=("🗓️ ✅Monthly" if period == "monthly" else "🗓️ Monthly"),
-                callback_data="lb_monthly_balance"
+                callback_data=f"lb_monthly_{field}"
             ),
         ],
         # Field selector
-        [btn("💰 Saldo", period, "balance"),  btn("⛏️ Mining", period, "mine_count")],
+        [btn("💰 Koin Didapat", period, "balance"),  btn("⛏️ Mining", period, "mine_count")],
         [btn("⚖️ Total KG", period, "total_kg"), btn("🪨 Total Ore", period, "ore_count")],
         # Actions
         [InlineKeyboardButton(text="🔄 Refresh", callback_data="lb_refresh")],
