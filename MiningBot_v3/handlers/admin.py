@@ -66,7 +66,7 @@ async def cmd_adminhelp(message: Message):
         "<b>👑 VIP Management:</b>",
         "/admin_givevip [user_id] [plan_id] — Beri VIP",
         "/admin_revokevip [user_id] — Cabut VIP",
-        "<i>Plan ID: 1_month, 3_months, 6_months, lifetime</i>",
+        "<i>Plan ID: 3_days, 7_days, 14_days, 30_days</i>",
         "",
         "<b>📸 Foto Admin, Ore, Alat & Zona:</b>",
         "/admin_setphoto — Upload foto profil admin",
@@ -397,8 +397,10 @@ async def cmd_giveore(message: Message):
     bag_note = ""
     if total_in_bag + qty > bag_slots:
         bag_note = f"\n⚠️ Bag user melebihi kapasitas ({total_in_bag + qty}/{bag_slots})!"
-    # Tambahkan dengan KG midpoint
-    avg_kg = (ore.get("kg_min", 0.5) + ore.get("kg_max", 2.0)) / 2 * qty
+    # FIX Bug #5: gunakan kg_min (berat teringan) agar tidak meledakkan bag_kg_used
+    # saat admin give ore dengan kg_max sangat besar (misal ancient_fossil = 15.000 kg)
+    unit_kg = ore.get("kg_min", 0.5)
+    avg_kg  = round(unit_kg * qty, 2)
     await add_ore_to_inventory(uid, ore_id, qty, avg_kg)
     await message.answer(
         f"✅ `{qty}x {ore['emoji']} {ore['name']}` → user `{uid}`{bag_note}",
@@ -447,6 +449,7 @@ async def cmd_reset(message: Message):
         owned_tools=["stone_pick"], unlocked_zones=["surface"],
         inventory={}, active_buffs={}, achievements=[],
         ore_inventory={}, ore_kg_data={},
+        museum_ores=[], favorite_ores=[],
         bag_slots=50, bag_kg_used=0.0, bag_kg_max=100.0,
         total_kg_mined=0.0,
         daily_streak=0, last_daily=None, last_energy_regen=None,
