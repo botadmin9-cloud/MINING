@@ -4,7 +4,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from config import ADMIN_IDS, TOOLS, ZONES, ORES
+from config import ADMIN_IDS, TOOLS, ZONES, ORES, ORE_TIER_COLORS
 from database import get_user, get_zone_photo, get_tool_photo, set_mining_multi_status
 from game import (perform_mine, build_mine_result_text, regen_energy,
                    energy_full_in, equip_tool, set_zone,
@@ -56,7 +56,7 @@ async def _mine_panel(user_id: int) -> tuple:
     zone_id = user.get("current_zone", "surface")
     zone = ZONES.get(zone_id, ZONES["surface"])
     is_admin = _is_admin(user_id)
-    cooldown = 1 if is_admin else get_mine_cooldown_seconds(user)
+    cooldown = 1 if is_admin else get_mine_cooldown_seconds(user, is_admin)  # FIX: teruskan is_admin
     vip_active = is_vip_active(user)
     admin_tag = " 👑 *[ADMIN — Gratis & Cepat]*" if is_admin else (" ✨ *[VIP]*" if vip_active else "")
 
@@ -65,11 +65,10 @@ async def _mine_panel(user_id: int) -> tuple:
     # ── Hitung sisa waktu cooldown ─────────────────────────────
     cooldown_status = ""
     if not is_admin:
-        from datetime import datetime as _dt
         last_mine = user.get("last_mine_time")
         if last_mine:
             try:
-                elapsed = (_dt.now() - _dt.fromisoformat(last_mine)).total_seconds()
+                elapsed = (datetime.now() - datetime.fromisoformat(last_mine)).total_seconds()
                 remaining = cooldown - elapsed
                 if remaining > 0:
                     cooldown_status = f"\n⏳ *Siap mining dalam: `{remaining:.1f}` detik*"
@@ -132,7 +131,10 @@ async def cb_mine_menu(callback: CallbackQuery):
                                                   reply_markup=kb, parse_mode="Markdown")
             await callback.message.delete()
         else:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+            except Exception:
+                pass
     except Exception:
         await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
@@ -215,7 +217,6 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
     except Exception:
         pass
 
-    from config import format_kg as _fkg
     total_xp   = 0
     total_kg   = 0.0
     ores_found = {}
@@ -224,37 +225,41 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
     new_ach    = []
     last_error = None
 
-    for i in range(count):
-        user = await get_user(uid)
-        if not user:
-            break
-        if not is_admin:
-            can_mine, _ = await check_mine_cooldown(user, is_admin)
-            if not can_mine:
-                cd = get_mine_cooldown_seconds(user, is_admin)
+    try:
+        for i in range(count):
+            user = await get_user(uid)
+            if not user:
+                break
+            if not is_admin:
+                can_mine, _ = await check_mine_cooldown(user, is_admin)
+                if not can_mine:
+                    cd = get_mine_cooldown_seconds(user, is_admin)
+                    await asyncio.sleep(cd)
+
+            r = await perform_mine(uid, is_admin=is_admin)
+            if not r["ok"]:
+                last_error = r["msg"]
+                break
+            total_xp   += r["xp_gain"]
+            total_kg   += r.get("ore_kg", 0.0)
+            ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
+            ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
+            if r["is_crit"]:    crits += 1
+            if r["is_lucky"]:   luckies += 1
+            if r["special_hit"]: specials.append(r["special_hit"])
+            if r["leveled_up"]: level_ups += 1
+            new_ach.extend(r.get("new_achievements", []))
+
+            if not is_admin and i < count - 1:
+                # FIX: Gunakan cooldown_secs dari result (sudah hitung buff terkini)
+                cd = r.get("cooldown_secs") or get_mine_cooldown_seconds(user, is_admin)
                 await asyncio.sleep(cd)
-
-        r = await perform_mine(uid, is_admin=is_admin)
-        if not r["ok"]:
-            last_error = r["msg"]
-            break
-        total_xp   += r["xp_gain"]
-        total_kg   += r.get("ore_kg", 0.0)
-        ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
-        ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
-        if r["is_crit"]:    crits += 1
-        if r["is_lucky"]:   luckies += 1
-        if r["special_hit"]: specials.append(r["special_hit"])
-        if r["leveled_up"]: level_ups += 1
-        new_ach.extend(r.get("new_achievements", []))
-
-        if not is_admin and i < count - 1:
-            cd = get_mine_cooldown_seconds(user, is_admin)
-            await asyncio.sleep(cd)
-
-    # Selesai — hapus status mining
-    if not is_admin:
-        await set_mining_multi_status(uid, False)
+    except Exception as _e:
+        last_error = f"⚠️ Mining dihentikan karena error: {_e}"
+    finally:
+        # Selalu hapus status mining, bahkan jika terjadi exception
+        if not is_admin:
+            await set_mining_multi_status(uid, False)
 
     ore_lines = "\n".join(f"   {k}: x{v}" for k, v in ores_found.items()) or "   Tidak ada"
     user = await get_user(uid)
@@ -266,7 +271,7 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
         f"🪨 *Bijih Ditemukan:*\n{ore_lines}",
         "",
         f"⭐ Total XP   : `+{total_xp:,}`",
-        f"⚖️ Total KG   : `{_fkg(total_kg)}`",
+        f"⚖️ Total KG   : `{format_kg(total_kg)}`",
         f"💥 Critical   : {crits}x",
         f"🍀 Lucky      : {luckies}x",
     ]
@@ -318,11 +323,14 @@ async def cb_equip_menu(callback: CallbackQuery):
     if not user:
         await callback.answer("❌ Ketik /start")
         return
-    await callback.message.edit_text(
-        "⚒️ *Pilih Alat untuk Dipakai:*",
-        reply_markup=equip_menu_kb(user["owned_tools"], user["current_tool"]),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "⚒️ *Pilih Alat untuk Dipakai:*",
+            reply_markup=equip_menu_kb(user["owned_tools"], user["current_tool"]),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -348,9 +356,15 @@ async def cb_equip(callback: CallbackQuery):
                 )
                 await callback.message.delete()
             except Exception:
-                await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+                try:
+                    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+                except Exception:
+                    pass
         else:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+            except Exception:
+                pass
 
 
 @router.callback_query(F.data == "zone_menu")
@@ -359,11 +373,14 @@ async def cb_zone_menu(callback: CallbackQuery):
     if not user:
         await callback.answer("❌ Ketik /start")
         return
-    await callback.message.edit_text(
-        "📍 *Pilih Zona Mining:*\n_(Zona berbeda = ore berbeda)_",
-        reply_markup=zone_menu_kb(user["unlocked_zones"], user.get("current_zone", "surface")),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "📍 *Pilih Zona Mining:*\n_(Zona berbeda = ore berbeda)_",
+            reply_markup=zone_menu_kb(user["unlocked_zones"], user.get("current_zone", "surface")),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -393,15 +410,20 @@ async def cb_set_zone(callback: CallbackQuery):
                 )
                 await callback.message.delete()
             except Exception:
-                await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+                try:
+                    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+                except Exception:
+                    pass
         else:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+            except Exception:
+                pass
 
 
 @router.message(Command("rare_ore"))
 async def cmd_rare_ore(message: Message):
     """Lihat semua ore rare (bisa dilihat semua pemain)."""
-    from config import ORES, ORE_TIER_COLORS
     tier_order = ["legendary", "mythical", "cosmic", "divine", "epic"]
     lines = ["💎 *Daftar Ore Rare di Mining Bot*\n"]
     for tier in tier_order:
