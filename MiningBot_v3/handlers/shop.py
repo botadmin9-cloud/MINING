@@ -2,18 +2,24 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from config import TOOLS, ITEMS, ZONES, ORES, TIER_COLORS, ADMIN_IDS
-from database import get_user
-from game import buy_tool, buy_item, unlock_zone
+from config import (TOOLS, ITEMS, ZONES, ORES, TIER_COLORS, ADMIN_IDS,
+                    BAG_SLOT_DEFAULT, BAG_SLOT_MAX, BAG_SLOT_STEP, BAG_SLOT_BASE_COST,
+                    ENERGY_UPGRADE_MAX, ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_BASE_COST,
+                    format_kg)
+from database import get_user, is_dynamic_admin
+from game import buy_tool, buy_item, unlock_zone, buy_bag_slot, buy_energy_upgrade
 from keyboards import (shop_main_kb, shop_tools_kb, tool_detail_kb,
                         shop_items_kb, item_detail_kb, shop_zones_kb,
-                        zone_detail_kb, vip_shop_kb, topup_shop_kb)
+                        zone_detail_kb, vip_shop_kb, topup_shop_kb,
+                        shop_upgrades_kb)
 
 router = Router()
 
 
-def _is_admin(uid: int) -> bool:
-    return uid in ADMIN_IDS
+async def _is_admin(uid: int) -> bool:
+    if uid in ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(uid)
 
 
 @router.message(F.text == "🏪 Shop")
@@ -28,11 +34,14 @@ async def show_shop(message: Message):
 
 @router.callback_query(F.data == "shop_menu")
 async def cb_shop_menu(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🏪 *Toko Mining*\n\nPilih kategori:",
-        reply_markup=shop_main_kb(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "🏪 *Toko Mining*\n\nPilih kategori:",
+            reply_markup=shop_main_kb(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -52,14 +61,17 @@ async def cb_shop_tools(callback: CallbackQuery):
         f"🪨 = Butuh Ore | 🛒 = Bisa dibeli\n\n"
         f"💡 Alat Legendary+ membutuhkan ore khusus!"
     )
-    await callback.message.edit_text(
-        text,
-        reply_markup=shop_tools_kb(
-            user["owned_tools"], user["level"], user["balance"],
-            page, user.get("ore_inventory", {})
-        ),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=shop_tools_kb(
+                user["owned_tools"], user["level"], user["balance"],
+                page, user.get("ore_inventory", {})
+            ),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -113,18 +125,21 @@ async def cb_tool_detail(callback: CallbackQuery):
         f"{ore_req_txt}\n\n"
         f"{'✅ *Sudah dimiliki*' + (' _(Aktif)_' if is_current else '') if owned else '🛒 Belum dimiliki'}"
     )
-    await callback.message.edit_text(
-        text,
-        reply_markup=tool_detail_kb(tool_id, owned, is_current),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=tool_detail_kb(tool_id, owned, is_current),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("buy_tool_"))
 async def cb_buy_tool(callback: CallbackQuery):
     tool_id = callback.data.replace("buy_tool_", "")
-    is_admin = _is_admin(callback.from_user.id)
+    is_admin = await _is_admin(callback.from_user.id)
     ok, msg = await buy_tool(callback.from_user.id, tool_id, admin=is_admin)
     await callback.answer(msg[:200], show_alert=True)
     if ok:
@@ -132,20 +147,26 @@ async def cb_buy_tool(callback: CallbackQuery):
         tool = TOOLS.get(tool_id)
         owned = tool_id in user["owned_tools"]
         is_current = user["current_tool"] == tool_id
-        await callback.message.edit_reply_markup(
-            reply_markup=tool_detail_kb(tool_id, owned, is_current)
-        )
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=tool_detail_kb(tool_id, owned, is_current)
+            )
+        except Exception:
+            pass
 
 
 # ── ITEMS ─────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "shop_items")
 async def cb_shop_items(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🎒 *Item & Consumable*\n\nBeli potion, scroll, dan item spesial!",
-        reply_markup=shop_items_kb(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "🎒 *Item & Consumable*\n\nBeli potion, scroll, dan item spesial!",
+            reply_markup=shop_items_kb(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -167,18 +188,21 @@ async def cb_item_detail(callback: CallbackQuery):
         f"📦 Dimiliki: `{qty}` buah\n"
         f"♻️ Stackable: {'Ya' if item['stackable'] else 'Tidak'}"
     )
-    await callback.message.edit_text(
-        text,
-        reply_markup=item_detail_kb(item_id),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=item_detail_kb(item_id),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("buy_item_"))
 async def cb_buy_item(callback: CallbackQuery):
     item_id = callback.data.replace("buy_item_", "")
-    is_admin = _is_admin(callback.from_user.id)
+    is_admin = await _is_admin(callback.from_user.id)
     ok, msg = await buy_item(callback.from_user.id, item_id, admin=is_admin)
     await callback.answer(msg[:200], show_alert=True)
     if ok:
@@ -195,11 +219,14 @@ async def cb_buy_item(callback: CallbackQuery):
                 f"📦 Dimiliki: `{qty}` buah\n"
                 f"♻️ Stackable: {'Ya' if item['stackable'] else 'Tidak'}"
             )
-            await callback.message.edit_text(
-                text,
-                reply_markup=item_detail_kb(item_id),
-                parse_mode="Markdown"
-            )
+            try:
+                await callback.message.edit_text(
+                    text,
+                    reply_markup=item_detail_kb(item_id),
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                pass
 
 
 # ── ZONES ─────────────────────────────────────────────────────
@@ -210,11 +237,14 @@ async def cb_shop_zones(callback: CallbackQuery):
     if not user:
         await callback.answer("Ketik /start!")
         return
-    await callback.message.edit_text(
-        "🌍 *Buka Zona Mining Baru*\n\nZona berbeda memberikan ore berbeda dan lebih berharga!",
-        reply_markup=shop_zones_kb(user["unlocked_zones"], user["level"], user["balance"]),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            "🌍 *Buka Zona Mining Baru*\n\nZona berbeda memberikan ore berbeda dan lebih berharga!",
+            reply_markup=shop_zones_kb(user["unlocked_zones"], user["level"], user["balance"]),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -245,18 +275,21 @@ async def cb_zone_detail(callback: CallbackQuery):
         f"📊 Ore Bonus :{bonus_txt if bonus_txt else ' Tidak ada'}\n\n"
         f"{'✅ *Sudah terbuka*' + (' _(Aktif)_' if is_active else '') if unlocked else '🔒 Belum dibuka'}"
     )
-    await callback.message.edit_text(
-        text,
-        reply_markup=zone_detail_kb(zone_id, unlocked, is_active),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=zone_detail_kb(zone_id, unlocked, is_active),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("unlock_zone_"))
 async def cb_unlock_zone(callback: CallbackQuery):
     zone_id = callback.data.replace("unlock_zone_", "")
-    is_admin = _is_admin(callback.from_user.id)
+    is_admin = await _is_admin(callback.from_user.id)
     ok, msg = await unlock_zone(callback.from_user.id, zone_id, admin=is_admin)
     await callback.answer(msg[:200], show_alert=True)
     if ok:
@@ -264,6 +297,96 @@ async def cb_unlock_zone(callback: CallbackQuery):
         zone = ZONES.get(zone_id, {})
         unlocked  = zone_id in user["unlocked_zones"]
         is_active = user.get("current_zone") == zone_id
-        await callback.message.edit_reply_markup(
-            reply_markup=zone_detail_kb(zone_id, unlocked, is_active)
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=zone_detail_kb(zone_id, unlocked, is_active)
+            )
+        except Exception:
+            pass
+
+
+# ── UPGRADES (Slot Bag & Energy) ──────────────────────────────
+
+def _build_upgrades_text(cur_slots: int, cur_energy: int, balance: int) -> str:
+    steps_slot   = (cur_slots - BAG_SLOT_DEFAULT) // BAG_SLOT_STEP
+    price_slot   = BAG_SLOT_BASE_COST + (steps_slot * 2000)
+    steps_energy = (cur_energy - 500) // ENERGY_UPGRADE_STEP
+    price_energy = ENERGY_UPGRADE_BASE_COST + (steps_energy * 5000)
+    slot_status   = "✅ *MAKS*" if cur_slots >= BAG_SLOT_MAX else f"`{price_slot:,}` koin"
+    energy_status = "✅ *MAKS*" if cur_energy >= ENERGY_UPGRADE_MAX else f"`{price_energy:,}` koin"
+    return (
+        f"⬆️ *Upgrade Karakter*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🎒 *Slot Bag*\n"
+        f"   Status : `{cur_slots}/{BAG_SLOT_MAX}` slot\n"
+        f"   +{BAG_SLOT_STEP} slot per upgrade\n"
+        f"   Harga   : {slot_status}\n\n"
+        f"⚡ *Max Energy*\n"
+        f"   Status : `{cur_energy}/{ENERGY_UPGRADE_MAX}`\n"
+        f"   +{ENERGY_UPGRADE_STEP} energy per upgrade\n"
+        f"   Harga   : {energy_status}\n\n"
+        f"💰 Saldo kamu : `{balance:,}` koin"
+    )
+
+
+@router.callback_query(F.data == "shop_upgrades")
+async def cb_shop_upgrades(callback: CallbackQuery):
+    user = await get_user(callback.from_user.id)
+    if not user:
+        await callback.answer("Ketik /start!")
+        return
+
+    cur_slots  = user.get("bag_slots", BAG_SLOT_DEFAULT)
+    cur_energy = user.get("max_energy", 500)
+    balance    = user.get("balance", 0)
+    text = _build_upgrades_text(cur_slots, cur_energy, balance)
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=shop_upgrades_kb(cur_slots, cur_energy, balance),
+            parse_mode="Markdown"
         )
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(F.data == "shop_buy_bag_slot")
+async def cb_shop_buy_bag_slot(callback: CallbackQuery):
+    is_admin = await _is_admin(callback.from_user.id)
+    ok, msg = await buy_bag_slot(callback.from_user.id, admin=is_admin)
+    await callback.answer(msg[:200], show_alert=True)
+    if ok:
+        # Refresh upgrade menu
+        user = await get_user(callback.from_user.id)
+        cur_slots  = user.get("bag_slots", BAG_SLOT_DEFAULT)
+        cur_energy = user.get("max_energy", 500)
+        balance    = user.get("balance", 0)
+        try:
+            await callback.message.edit_text(
+                _build_upgrades_text(cur_slots, cur_energy, balance),
+                reply_markup=shop_upgrades_kb(cur_slots, cur_energy, balance),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data == "shop_buy_energy")
+async def cb_shop_buy_energy(callback: CallbackQuery):
+    is_admin = await _is_admin(callback.from_user.id)
+    ok, msg = await buy_energy_upgrade(callback.from_user.id, admin=is_admin)
+    await callback.answer(msg[:200], show_alert=True)
+    if ok:
+        user = await get_user(callback.from_user.id)
+        cur_slots  = user.get("bag_slots", BAG_SLOT_DEFAULT)
+        cur_energy = user.get("max_energy", 500)
+        balance    = user.get("balance", 0)
+        try:
+            await callback.message.edit_text(
+                _build_upgrades_text(cur_slots, cur_energy, balance),
+                reply_markup=shop_upgrades_kb(cur_slots, cur_energy, balance),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
