@@ -1,3 +1,5 @@
+import aiosqlite
+import json
 import random
 import logging
 from datetime import datetime, timedelta
@@ -9,9 +11,9 @@ from config import (TOOLS, ORES, ITEMS, ACHIEVEMENTS, ZONES,
                     xp_for_level, MAX_LEVEL, ADMIN_IDS,
                     calculate_sell_price, get_random_kg, format_kg,
                     KG_PRICE_MULTIPLIER, XP_BASE_MULTIPLIER,
-                    BAG_KG_MAX, BAG_KG_UPGRADE_STEP, BAG_KG_UPGRADE_COST)
+                    ORE_TIER_COLORS)
 from database import (get_user, update_user, log_mine, add_balance,
-                       add_ore_to_inventory, remove_ore_from_inventory)
+                       add_ore_to_inventory, remove_ore_from_inventory, DB_PATH)
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +24,20 @@ logger = logging.getLogger(__name__)
 async def regen_energy(user: dict) -> dict:
     now = datetime.now()
     last = user.get("last_energy_regen")
+    # Jika energy sudah penuh, selalu update timestamp agar timer tidak tertinggal
+    if user["energy"] >= user["max_energy"]:
+        await update_user(user["user_id"], last_energy_regen=now.isoformat())
+        return user
     if last:
         try:
             last_dt = datetime.fromisoformat(last)
             minutes = (now - last_dt).total_seconds() / 60
-            gain = int(minutes / ENERGY_COOLDOWN_MINUTES)
-            if gain > 0:
+            ticks = int(minutes / ENERGY_COOLDOWN_MINUTES)
+            if ticks > 0:
                 from config import VIP_ENERGY_REGEN_BONUS
-                vip_extra = VIP_ENERGY_REGEN_BONUS * gain if is_vip_active(user) else 0
-                new_e = min(user["energy"] + gain + vip_extra, user["max_energy"])
+                energy_gained = ticks * ENERGY_REGEN_RATE
+                vip_extra = VIP_ENERGY_REGEN_BONUS * ticks if is_vip_active(user) else 0
+                new_e = min(user["energy"] + energy_gained + vip_extra, user["max_energy"])
                 await update_user(user["user_id"], energy=new_e,
                                   last_energy_regen=now.isoformat())
                 user["energy"] = new_e
@@ -40,12 +47,14 @@ async def regen_energy(user: dict) -> dict:
         await update_user(user["user_id"], last_energy_regen=now.isoformat())
     return user
 
-
 def energy_full_in(user: dict) -> str:
     if user["energy"] >= user["max_energy"]:
         return "✅ PENUH"
     needed = user["max_energy"] - user["energy"]
-    total_mins = needed * ENERGY_COOLDOWN_MINUTES
+    # FIX Bug #8b: tiap tick mengisi ENERGY_REGEN_RATE energy, bukan 1
+    import math
+    ticks_needed = math.ceil(needed / ENERGY_REGEN_RATE)
+    total_mins = ticks_needed * ENERGY_COOLDOWN_MINUTES
     h, m = divmod(int(total_mins), 60)
     return f"{h}j {m}m" if h else f"{m}m"
 
@@ -71,8 +80,8 @@ def get_mine_cooldown_seconds(user: dict, is_admin: bool = False) -> int:
     base_delay = tool.get("speed_delay", 6)
     buffs = get_active_buffs(user)
     speed_mult = get_buff_val(buffs, "speed_boost", 1.0)
-    if speed_mult < 1.0:
-        base_delay = int(base_delay * speed_mult)
+    if speed_mult > 0 and speed_mult != 1.0:  # FIX: terapkan buff kapanpun nilainya bukan 1.0 (bukan hanya < 1.0)
+        base_delay = max(1, int(base_delay * speed_mult))
     if is_vip_active(user):
         from config import VIP_COOLDOWN_REDUCTION
         base_delay = max(1, int(base_delay * VIP_COOLDOWN_REDUCTION))
@@ -196,6 +205,12 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     zone        = ZONES.get(zone_id, ZONES["surface"])
     energy_cost = tool["energy_cost"]
 
+    # Cek cooldown (jika bukan admin)
+    if not is_admin:
+        can_mine, cd_msg = await check_mine_cooldown(user, is_admin=False)
+        if not can_mine:
+            return {"ok": False, "msg": cd_msg}
+
     # Admin tidak perlu energy
     if not is_admin and user["energy"] < energy_cost:
         return {
@@ -206,7 +221,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
                 f"Dibutuhkan : `{energy_cost}` energy\n"
                 f"⏰ Energy penuh dalam: *{energy_full_in(user)}*\n\n"
                 f"💡 Gunakan ⚡ *Energy Potion* dari inventaris!\n"
-                f"💡 Atau beli tambahan energy: `/buyenergy`"
+                f"💡 Atau upgrade max energy di *🏪 Shop → ⬆️ Upgrade*"
             )
         }
 
@@ -221,22 +236,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
                 f"🎒 *Bag penuh! (slot)*\n\n"
                 f"Kapasitas: `{total_ore_in_bag}/{bag_slots}` slot\n\n"
                 f"💡 Jual ore di *🛒 Market* atau gunakan `/bag`\n"
-                f"💡 Tambah slot: `/buyslot`"
-            )
-        }
-
-    # Cek kapasitas bag (KG)
-    current_kg = user.get("bag_kg_used", 0.0)
-    max_kg = user.get("bag_kg_max", 100.0)
-    # Estimasi kg ore terberat yang mungkin didapat, jika hampir penuh, tolak
-    if not is_admin and current_kg >= max_kg * 0.98:
-        return {
-            "ok": False,
-            "msg": (
-                f"🎒 *Bag terlalu berat!*\n\n"
-                f"Berat saat ini: `{format_kg(current_kg)}/{format_kg(max_kg)}`\n\n"
-                f"💡 Jual ore di *🛒 Market* atau gunakan `/bag`\n"
-                f"💡 Upgrade kapasitas KG: `/buykg`"
+                f"💡 Tambah slot di *🏪 Shop → ⬆️ Upgrade*"
             )
         }
 
@@ -250,7 +250,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     xp_mult  = get_buff_val(buffs, "xp_mult", 1.0) or 1.0
     perm_xp_mult = user.get("perm_xp_mult", 1.0) or 1.0  # permanent XP dari rebirth
     tool_xp_bonus = tool.get("xp_bonus", 1.0)
-    zone_xp_bonus = zone.get("kg_bonus", 1.0)  # zona yang lebih dalam = XP lebih banyak
+    zone_xp_bonus = zone.get("xp_bonus", 1.0)  # zona yang lebih dalam = XP lebih banyak
 
     # XP dasar dari ore, dikalikan semua bonus
     base_xp = ore["xp"]
@@ -280,7 +280,8 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     special_hit = None
 
     # ── Apply changes ─────────────────────────────────────────
-    new_energy = user["energy"] - (0 if is_admin else energy_cost)
+    # FIX: max(0, ...) agar energy tidak pernah negatif (edge case race condition)
+    new_energy = max(0, user["energy"] - (0 if is_admin else energy_cost))
     new_xp     = user["xp"] + xp_gain
     new_level  = user["level"]
     leveled_up = False
@@ -309,7 +310,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     # Hitung bag usage setelah tambah
     user_after = await get_user(user_id)
     bag_used = sum(user_after.get("ore_inventory", {}).values()) if user_after else 0
-    actual_kg_used = user_after.get("bag_kg_used", 0.0) if user_after else round(current_kg + ore_kg, 2)
+    actual_kg_used = user_after.get("bag_kg_used", 0.0) if user_after else 0.0
 
     await log_mine(user_id, tool_id, tool["name"], zone_id,
                    ore_id, ore["name"], 0, xp_gain,
@@ -346,20 +347,22 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
         "new_achievements": new_achievements,
         "bag_used":     bag_used,
         "bag_slots":    user.get("bag_slots", 50),
-        "bag_kg_used":  actual_kg_used,
-        "bag_kg_max":   max_kg,
         "new_xp":       new_xp,
         "xp_needed":    xp_for_level(new_level),
         "cooldown_secs": get_mine_cooldown_seconds(user),
+        "last_mine_time_str": datetime.now().isoformat(),
     }
 
 
 async def update_total_kg_mined(user_id: int, kg: float):
-    """Update total kg mined untuk achievement tracking."""
-    user = await get_user(user_id)
-    if user:
-        current_total = user.get("total_kg_mined", 0.0)
-        await update_user(user_id, total_kg_mined=round(current_total + kg, 2))
+    """Update total kg mined untuk achievement tracking.
+    Menggunakan SQL atomic increment untuk menghindari race condition."""
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        await db.execute(
+            "UPDATE users SET total_kg_mined = ROUND(total_kg_mined + ?, 2) WHERE user_id = ?",
+            (kg, user_id)
+        )
+        await db.commit()
 
 
 def build_mine_result_text(r: dict) -> str:
@@ -381,7 +384,6 @@ def build_mine_result_text(r: dict) -> str:
 
     ore_desc = ore.get("desc", "Ore yang kamu temukan.")
     ore_tier = ore.get("tier", "common")
-    from config import ORE_TIER_COLORS
     tier_color = ORE_TIER_COLORS.get(ore_tier, "⬜")
 
     # Estimasi berat kategori
@@ -435,7 +437,6 @@ def build_mine_result_text(r: dict) -> str:
 
     lines.append(f"")
     # Tambah info cooldown berikutnya
-    from datetime import datetime as _dt2
     last_mine_time = r.get("last_mine_time_str", "")
     cooldown_secs  = r.get("cooldown_secs", 0)
     if cooldown_secs > 0:
@@ -466,6 +467,22 @@ async def check_achievements(user_id: int) -> list:
     async def grant(ach_id: str):
         if ach_id in ACHIEVEMENTS and ach_id not in achieved:
             ach = ACHIEVEMENTS[ach_id]
+            # Atomic check: re-fetch DB to avoid double-grant di concurrent calls
+            async with aiosqlite.connect(DB_PATH, timeout=30) as _db:
+                async with _db.execute(
+                    "SELECT achievements FROM users WHERE user_id=?", (user_id,)
+                ) as _cur:
+                    _row = await _cur.fetchone()
+                    if _row:
+                        _cur_ach = json.loads(_row[0]) if _row[0] else []
+                        if ach_id in _cur_ach:
+                            return  # Already granted by another concurrent call
+                        _cur_ach.append(ach_id)
+                        await _db.execute(
+                            "UPDATE users SET achievements=? WHERE user_id=?",
+                            (json.dumps(_cur_ach), user_id)
+                        )
+                        await _db.commit()
             achieved.append(ach_id)
             await add_balance(user_id, ach["reward"], f"Achievement: {ach['name']}")
             new_ones.append(ach)
@@ -523,9 +540,17 @@ async def check_achievements(user_id: int) -> list:
         await grant("infinity_hunter")
 
     # Legendary first find
-    legendary_ores = {"diamond","amethyst","opal","mythril","alexandrite","painite","benitoite","jadeite","larimar","musgravite"}
+    legendary_ores = {"diamond","amethyst","opal","mythril","alexandrite","painite",
+                      "benitoite","jadeite","larimar","musgravite","red_beryl",
+                      "grandidierite","serendibite","poudretteite"}
     if any(ore_inv.get(o, 0) > 0 for o in legendary_ores):
         await grant("legendary_find")
+
+    # First rare ore (rare tier or higher)
+    rare_tiers = {"rare", "epic", "legendary", "mythical", "cosmic", "divine"}
+    if any(ORES.get(o, {}).get("tier") in rare_tiers and qty > 0
+           for o, qty in ore_inv.items()):
+        await grant("first_rare")
 
     # Collector achievements
     unique_ores = sum(1 for v in ore_inv.values() if v > 0)
@@ -543,8 +568,8 @@ async def check_achievements(user_id: int) -> list:
     if all_zone_ids.issubset(unlocked_zones):
         await grant("all_zones")
 
-    if new_ones:
-        await update_user(user_id, achievements=achieved)
+    # Note: achievements are already persisted atomically inside grant()
+    # No need for a final update_user call here
     return new_ones
 
 
@@ -667,39 +692,33 @@ async def use_item(user_id: int, item_id: str) -> Tuple[bool, str]:
         updates["energy"] = new_e
         msg_lines.append(f"⚡ Energy: `{user['energy']} → {new_e}/{user['max_energy']}`")
 
-    elif "mystery" in effect:
-        reward = _mystery_box_reward(premium=False)
+    elif "mystery_divine" in effect:
+        # Harus dicek SEBELUM "mystery" dan "mystery_premium" karena
+        # "mystery" in {"mystery_divine": True} == True (false match)
+        reward = _mystery_box_reward(premium=True, divine=True)
         msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
 
     elif "mystery_premium" in effect:
         reward = _mystery_box_reward(premium=True)
         msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
 
+    elif "mystery" in effect:
+        reward = _mystery_box_reward(premium=False)
+        msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
+
     elif "bag_expand" in effect:
         cur_slots = user.get("bag_slots", 50)
-        cur_kg = user.get("bag_kg_max", 100.0)
-        from config import BAG_SLOT_MAX, BAG_KG_MAX
+        from config import BAG_SLOT_MAX
         new_slots = min(cur_slots + 5, BAG_SLOT_MAX)
-        new_kg = min(cur_kg + 10.0, BAG_KG_MAX)
         updates["bag_slots"] = new_slots
-        updates["bag_kg_max"] = new_kg
-        msg_lines.append(f"🎒 Slot bag: `{cur_slots} → {new_slots}`")
-        msg_lines.append(f"⚖️ Kapasitas KG: `{format_kg(cur_kg)} → {format_kg(new_kg)}`")
+        msg_lines.append(f"🎒 Slot bag: `{cur_slots} → {new_slots}` (+5 slot)")
 
     elif "mega_bag_expand" in effect:
         cur_slots = user.get("bag_slots", 50)
-        cur_kg = user.get("bag_kg_max", 100.0)
-        from config import BAG_SLOT_MAX, BAG_KG_MAX
+        from config import BAG_SLOT_MAX
         new_slots = min(cur_slots + 15, BAG_SLOT_MAX)
-        new_kg = min(cur_kg + 50.0, BAG_KG_MAX)
         updates["bag_slots"] = new_slots
-        updates["bag_kg_max"] = new_kg
-        msg_lines.append(f"🎒 Slot bag: `{cur_slots} → {new_slots}` (+15)")
-        msg_lines.append(f"⚖️ Kapasitas KG: `{format_kg(cur_kg)} → {format_kg(new_kg)}` (+50kg)")
-
-    elif "mystery_divine" in effect:
-        reward = _mystery_box_reward(premium=True, divine=True)
-        msg_lines.extend(await _apply_mystery_reward(user_id, user, reward))
+        msg_lines.append(f"🎒 Slot bag: `{cur_slots} → {new_slots}` (+15 slot)")
 
     elif any(k in effect for k in ("kg_boost","luck_buff","xp_mult","speed_boost","coin_mult")):
         buffs = get_active_buffs(user)
@@ -734,6 +753,12 @@ async def use_item(user_id: int, item_id: str) -> Tuple[bool, str]:
             "owned_tools": ["stone_pick"], "current_tool": "stone_pick",
         })
         msg_lines.append(f"🔄 *REBIRTH #{rb_count}!* Level direset. Permanent XP: `{perm_xp:.1f}x`")
+        # FIX BUG 6: Grant rebirth_1 achievement (hanya 1x pertama kali)
+        await update_user(user_id, **updates)
+        updates = {}  # sudah di-apply, reset agar tidak double-update
+        ach = await _grant_if_new(user_id, "rebirth_1")
+        if ach:
+            msg_lines.append(f"🏅 *Prestasi: {ach['name']}* (+{ach['reward']:,}🪙)")
 
     await update_user(user_id, **updates)
     return True, "\n".join(msg_lines)
@@ -787,7 +812,7 @@ def _mystery_box_reward(premium: bool = False, divine: bool = False) -> dict:
     if premium:
         roll = random.random()
         if roll < 0.40:
-            items_list = ["xp_boost", "xp_mega_boost", "luck_elixir", "mega_luck_potion", "weight_enhancer"]
+            items_list = ["xp_mega_boost", "divine_luck_orb", "speed_boost", "mana_crystal"]
             return {"type": "item", "item_id": random.choice(items_list)}
         elif roll < 0.70:
             amount = random.randint(10000, 100000)
@@ -808,7 +833,7 @@ def _mystery_box_reward(premium: bool = False, divine: bool = False) -> dict:
             amount = random.randint(500, 5000)
             return {"type": "coins", "amount": amount}
         elif roll < 0.95:
-            items_list = ["energy_drink", "energy_potion", "luck_elixir", "xp_boost", "speed_boost"]
+            items_list = ["energy_drink", "energy_potion", "mana_crystal", "speed_boost"]
             return {"type": "item", "item_id": random.choice(items_list)}
         else:
             rare_ores = ["sapphire", "emerald", "ruby", "topaz"]
@@ -931,10 +956,11 @@ async def claim_daily(user_id: int) -> Tuple[bool, str]:
 
 
 async def _grant_if_new(user_id: int, ach_id: str):
-    from config import ACHIEVEMENTS
     user = await get_user(user_id)
     if user and ach_id not in user["achievements"]:
-        ach = ACHIEVEMENTS[ach_id]
+        ach = ACHIEVEMENTS.get(ach_id)  # FIX: pakai .get() agar tidak KeyError jika ach_id tidak ada
+        if not ach:
+            return None
         user["achievements"].append(ach_id)
         await add_balance(user_id, ach["reward"], f"Achievement: {ach['name']}")
         await update_user(user_id, achievements=user["achievements"])
@@ -1011,37 +1037,3 @@ async def buy_bag_slot(user_id: int, admin: bool = False) -> Tuple[bool, str]:
         f"_(Max: {BAG_SLOT_MAX} slot)_"
     )
 
-
-# ══════════════════════════════════════════════════════════════
-# BUY BAG KG UPGRADE (BARU)
-# ══════════════════════════════════════════════════════════════
-async def buy_bag_kg(user_id: int, admin: bool = False) -> Tuple[bool, str]:
-    from config import BAG_KG_MAX, BAG_KG_UPGRADE_STEP, BAG_KG_UPGRADE_COST
-    user = await get_user(user_id)
-    if not user:
-        return False, "❌ User tidak ditemukan."
-
-    cur_kg = user.get("bag_kg_max", 100.0)
-    if cur_kg >= BAG_KG_MAX:
-        return False, f"❌ *Kapasitas KG sudah maksimal!*\nMaksimal: `{format_kg(BAG_KG_MAX)}`"
-
-    steps_done = int((cur_kg - 100.0) // BAG_KG_UPGRADE_STEP)
-    price = BAG_KG_UPGRADE_COST + (steps_done * 1000)
-
-    if not admin and user["balance"] < price:
-        return False, f"❌ Koin tidak cukup!\nButuh  : `{price:,}` koin\nPunya  : `{user['balance']:,}` koin"
-
-    new_kg = min(cur_kg + BAG_KG_UPGRADE_STEP, BAG_KG_MAX)
-    updates = {"bag_kg_max": new_kg}
-    if not admin:
-        updates["balance"] = user["balance"] - price
-    await update_user(user_id, **updates)
-
-    return True, (
-        f"✅ *Kapasitas KG Ditingkatkan!*\n\n"
-        f"⚖️ Kapasitas KG : `{format_kg(cur_kg)}` → `{format_kg(new_kg)}`\n"
-        f"💰 Biaya        : `{price:,}` koin\n"
-        f"💰 Saldo        : `{updates.get('balance', user['balance']):,}` koin\n\n"
-        f"Upgrade berikutnya: `{BAG_KG_UPGRADE_COST + (steps_done+1)*1000:,}` koin\n"
-        f"_(Max: {format_kg(BAG_KG_MAX)})_"
-    )
