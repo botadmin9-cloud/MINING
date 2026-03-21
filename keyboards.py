@@ -59,10 +59,50 @@ def shop_main_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="⛏️ Alat Mining",          callback_data="shop_tools_0")],
         [InlineKeyboardButton(text="🎒 Item & Consumable",      callback_data="shop_items")],
         [InlineKeyboardButton(text="🌍 Buka Zona Baru",        callback_data="shop_zones")],
+        [InlineKeyboardButton(text="⬆️ Upgrade (Bag & Energy)", callback_data="shop_upgrades")],
         [InlineKeyboardButton(text="👑 VIP Member",             callback_data="shop_vip")],
         [InlineKeyboardButton(text="💰 Top Up Saldo",           callback_data="shop_topup")],
         [InlineKeyboardButton(text="🏠 Menu Utama",            callback_data="main_menu")],
     ])
+
+
+def shop_upgrades_kb(cur_slots: int, cur_energy: int, balance: int) -> InlineKeyboardMarkup:
+    from config import BAG_SLOT_MAX, BAG_SLOT_STEP, BAG_SLOT_BASE_COST, BAG_SLOT_DEFAULT
+    from config import ENERGY_UPGRADE_MAX, ENERGY_UPGRADE_STEP, ENERGY_UPGRADE_BASE_COST
+
+    rows = []
+
+    # Slot bag button
+    if cur_slots >= BAG_SLOT_MAX:
+        rows.append([InlineKeyboardButton(
+            text="🎒 Slot Bag — ✅ MAKS",
+            callback_data="noop"
+        )])
+    else:
+        steps = (cur_slots - BAG_SLOT_DEFAULT) // BAG_SLOT_STEP
+        price = BAG_SLOT_BASE_COST + (steps * 2000)
+        label = f"🎒 Beli +{BAG_SLOT_STEP} Slot Bag — {price:,}🪙"
+        if balance < price:
+            label = f"💸 {label} (Koin kurang)"
+        rows.append([InlineKeyboardButton(text=label, callback_data="shop_buy_bag_slot")])
+
+    # Energy button
+    if cur_energy >= ENERGY_UPGRADE_MAX:
+        rows.append([InlineKeyboardButton(
+            text="⚡ Max Energy — ✅ MAKS",
+            callback_data="noop"
+        )])
+    else:
+        steps = (cur_energy - 500) // ENERGY_UPGRADE_STEP
+        price = ENERGY_UPGRADE_BASE_COST + (steps * 5000)
+        label = f"⚡ Beli +{ENERGY_UPGRADE_STEP} Max Energy — {price:,}🪙"
+        if balance < price:
+            label = f"💸 {label} (Koin kurang)"
+        rows.append([InlineKeyboardButton(text=label, callback_data="shop_buy_energy")])
+
+    rows.append([InlineKeyboardButton(text="🔙 Shop Menu", callback_data="shop_menu")])
+    rows.append([InlineKeyboardButton(text="🏠 Menu Utama", callback_data="main_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def shop_tools_kb(owned: list, level: int, balance: int, page: int = 0,
