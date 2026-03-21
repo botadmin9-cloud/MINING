@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from config import TOOLS, ZONES, ADMIN_IDS
-from database import get_user, create_user, update_user
+from database import get_user, create_user, update_user, is_dynamic_admin
 from game import regen_energy, energy_full_in, get_active_buffs
 from keyboards import main_menu_kb
 
@@ -16,8 +16,10 @@ class RegisterState(StatesGroup):
     waiting_username = State()
 
 
-def _is_admin(uid: int) -> bool:
-    return uid in ADMIN_IDS
+async def _is_admin(uid: int) -> bool:
+    if uid in ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(uid)
 
 
 def _official_links_kb() -> InlineKeyboardMarkup:
@@ -37,6 +39,12 @@ async def cmd_start(message: Message, state: FSMContext):
     uid   = message.from_user.id
     uname = message.from_user.username or ""
     fname = message.from_user.first_name or "Miner"
+
+    # FIX: Bersihkan FSM state apapun yang mungkin tertinggal (misal user tinggalkan
+    # flow market/transfer tanpa tekan tombol Batal)
+    current_state = await state.get_state()
+    if current_state and "RegisterState" not in (current_state or ""):
+        await state.clear()
 
     existing = await get_user(uid)
     if not existing:
@@ -68,7 +76,7 @@ async def cmd_start(message: Message, state: FSMContext):
         if buffs:
             buff_txt = "\n⚡ *Buff aktif:* " + ", ".join(buffs.keys())
 
-        admin_badge = " 👑 *[ADMIN]*" if _is_admin(uid) else ""
+        admin_badge = " 👑 *[ADMIN]*" if await _is_admin(uid) else ""
         bag_slots = user.get("bag_slots", 50)
         ore_used  = sum(user.get("ore_inventory", {}).values())
         display   = user.get("display_name") or user.get("first_name", fname)
@@ -131,7 +139,7 @@ async def _finish_register(message: Message, uid: int, uname: str,
                              fname: str, display_name: str):
     from config import STARTING_BALANCE
     await create_user(uid, uname, fname, display_name)
-    admin_note = "\n👑 Kamu adalah *Admin Bot* ini!" if _is_admin(uid) else ""
+    admin_note = "\n👑 Kamu adalah *Admin Bot* ini!" if await _is_admin(uid) else ""
     text = (
         f"⛏️ *Selamat Datang di Mining Bot, {display_name}!*\n\n"
         f"🎮 Kamu telah bergabung sebagai penambang!\n"
@@ -144,8 +152,7 @@ async def _finish_register(message: Message, uid: int, uname: str,
         f"👤 Nama Game  : *{display_name}*\n\n"
         f"📋 *Perintah Berguna:*\n"
         f"• `/bag` — Lihat & kelola ore\n"
-        f"• `/buyenergy` — Tambah max energy\n"
-        f"• `/buyslot` — Tambah slot bag\n"
+        f"• `/shop` — Upgrade Bag & Energy di menu Shop\n"
         f"• `/profile` — Lihat profil\n"
         f"• `/rare_ore` — Lihat semua ore rare\n\n"
         f"🚀 Gunakan menu di bawah untuk memulai!"
@@ -182,7 +189,7 @@ async def cb_main_menu(callback: CallbackQuery):
         return
     tool = TOOLS.get(user["current_tool"], TOOLS["stone_pick"])
     zone = ZONES.get(user.get("current_zone", "surface"), ZONES["surface"])
-    admin_badge = " 👑" if _is_admin(uid) else ""
+    admin_badge = " 👑" if await _is_admin(uid) else ""
     ore_used    = sum(user.get("ore_inventory", {}).values())
     bag_slots   = user.get("bag_slots", 50)
     display     = user.get("display_name") or user.get("first_name", "Miner")
@@ -196,7 +203,10 @@ async def cb_main_menu(callback: CallbackQuery):
         f"🔧 Alat   : {tool['emoji']} {tool['name']}\n"
         f"📍 Zona   : {zone['name']}"
     )
-    await callback.message.edit_text(text, parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
