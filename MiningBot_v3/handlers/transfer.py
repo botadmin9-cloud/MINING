@@ -1,9 +1,3 @@
-"""
-FIX #10: Transfer Ore antar pemain
-- Maks 3x kirim per minggu
-- Maks 3x terima per minggu
-- Reset hitungan setiap awal minggu (Senin)
-"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
