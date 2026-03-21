@@ -1,3 +1,4 @@
+import asyncio
 from aiogram import Router, F
 from aiogram.types import Message, PhotoSize, CallbackQuery
 from aiogram.filters import Command
@@ -95,7 +96,7 @@ async def cmd_adminhelp(message: Message):
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "<b>💡 Tips:</b>",
         "• Gunakan Shop normal untuk beli tanpa bayar",
-        "• /buyslot dan /buyenergy gratis untuk admin",
+        "• /shop → Upgrade: slot bag & energy gratis untuk admin",
         "• Admin otomatis terdeteksi dari ADMIN_IDS di .env",
     ]
     text = "\n".join(lines)
@@ -243,8 +244,23 @@ async def cmd_addcoin(message: Message):
     except ValueError:
         await message.answer("❌ Format salah! Gunakan angka.")
         return
+    # Clamp: max 1 triliun per grant, boleh negatif (debit) tapi max -1M
+    MAX_GRANT = 1_000_000_000_000
+    if abs(amount) > MAX_GRANT:
+        await message.answer(f"❌ Jumlah terlalu besar! Maksimal: `{MAX_GRANT:,}`", parse_mode="Markdown")
+        return
+    user = await get_user(uid)
+    if not user:
+        await message.answer(f"❌ User `{uid}` tidak ditemukan!")
+        return
     await add_balance(uid, amount, f"Admin grant by {message.from_user.id}")
-    await message.answer(f"✅ `+{amount:,}` koin → user `{uid}`", parse_mode="Markdown")
+    user_after = await get_user(uid)
+    action = "+" if amount >= 0 else ""
+    await message.answer(
+        f"✅ `{action}{amount:,}` koin → user `{uid}`\n"
+        f"💰 Saldo baru: `{user_after['balance']:,}` koin",
+        parse_mode="Markdown"
+    )
 
 
 @router.message(Command("admin_setlevel"))
@@ -261,6 +277,10 @@ async def cmd_setlevel(message: Message):
         await message.answer("❌ Format salah!")
         return
     lv = max(1, min(lv, MAX_LEVEL))
+    user = await get_user(uid)
+    if not user:
+        await message.answer(f"❌ User `{uid}` tidak ditemukan!")
+        return
     await update_user(uid, level=lv, xp=0)
     await message.answer(f"✅ Level user `{uid}` → `{lv}`", parse_mode="Markdown")
 
@@ -370,12 +390,18 @@ async def cmd_giveore(message: Message):
         await message.answer("❌ User tidak ditemukan!")
         return
     ore = ORES[ore_id]
-    from config import get_random_kg
+    # Cek kapasitas bag user (admin bisa override, tapi beri warning)
+    ore_inv_now = user.get("ore_inventory", {})
+    total_in_bag = sum(ore_inv_now.values())
+    bag_slots = user.get("bag_slots", 50)
+    bag_note = ""
+    if total_in_bag + qty > bag_slots:
+        bag_note = f"\n⚠️ Bag user melebihi kapasitas ({total_in_bag + qty}/{bag_slots})!"
     # Tambahkan dengan KG midpoint
     avg_kg = (ore.get("kg_min", 0.5) + ore.get("kg_max", 2.0)) / 2 * qty
     await add_ore_to_inventory(uid, ore_id, qty, avg_kg)
     await message.answer(
-        f"✅ `{qty}x {ore['emoji']} {ore['name']}` → user `{uid}`",
+        f"✅ `{qty}x {ore['emoji']} {ore['name']}` → user `{uid}`{bag_note}",
         parse_mode="Markdown"
     )
 
@@ -412,16 +438,24 @@ async def cmd_reset(message: Message):
     except ValueError:
         await message.answer("❌ user_id harus angka!")
         return
-    # ✅ achievements harus list [], bukan dict {}
+    from config import STARTING_BALANCE
+    # ✅ Reset semua field ke nilai awal (lengkap)
     await update_user(uid,
-        balance=1000, total_earned=0, total_mined=0, mine_count=0,
+        balance=STARTING_BALANCE, total_earned=0, total_mined=0, mine_count=0,
         energy=500, max_energy=500, level=1, xp=0,
         current_tool="stone_pick", current_zone="surface",
         owned_tools=["stone_pick"], unlocked_zones=["surface"],
         inventory={}, active_buffs={}, achievements=[],
         ore_inventory={}, ore_kg_data={},
         bag_slots=50, bag_kg_used=0.0, bag_kg_max=100.0,
-        daily_streak=0, rebirth_count=0, perm_coin_mult=1.0, perm_xp_mult=1.0
+        total_kg_mined=0.0,
+        daily_streak=0, last_daily=None, last_energy_regen=None,
+        last_mine_time=None, last_auto_mine=None,
+        rebirth_count=0, perm_coin_mult=1.0, perm_xp_mult=1.0,
+        vip_expires_at=None, vip_type=None,
+        transfer_send_count=0, transfer_receive_count=0, transfer_week_start=None,
+        last_name_change=None,
+        is_mining_multi=0, mining_multi_type=None, mining_multi_started=None
     )
     await message.answer(f"✅ User `{uid}` berhasil direset.", parse_mode="Markdown")
 
@@ -436,7 +470,8 @@ async def cmd_broadcast(message: Message):
         return
     users = await get_all_users()
     sent = failed = 0
-    for u in users:
+    status_msg = await message.answer(f"📢 Memulai broadcast ke {len(users)} user...")
+    for i, u in enumerate(users):
         try:
             await message.bot.send_message(
                 u["user_id"],
@@ -446,7 +481,23 @@ async def cmd_broadcast(message: Message):
             sent += 1
         except Exception:
             failed += 1
-    await message.answer(f"✅ Broadcast selesai!\nTerkirim: `{sent}` | Gagal: `{failed}`", parse_mode="Markdown")
+        # Rate limiting: 30 pesan/detik max (Telegram limit)
+        await asyncio.sleep(0.05)
+        # Update progress setiap 50 user
+        if (i + 1) % 50 == 0:
+            try:
+                await status_msg.edit_text(
+                    f"📢 Broadcast berjalan... {i+1}/{len(users)} user"
+                )
+            except Exception:
+                pass
+    try:
+        await status_msg.edit_text(
+            f"✅ Broadcast selesai!\nTerkirim: `{sent}` | Gagal: `{failed}`",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        await message.answer(f"✅ Broadcast selesai!\nTerkirim: `{sent}` | Gagal: `{failed}`", parse_mode="Markdown")
 
 
 @router.message(Command("admin_tools"))
@@ -490,7 +541,19 @@ async def cmd_admin_zones(message: Message):
     lines = ["🌍 *Daftar Zone ID:*\n"]
     for zid, z in ZONES.items():
         lines.append(f"`{zid}` — {z['name']} (Lv.{z['level_req']})")
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    full = "\n".join(lines)
+    if len(full) > 4000:
+        chunk, chunk_len = [], 0
+        for line in lines:
+            if chunk_len + len(line) + 1 > 3800 and chunk:
+                await message.answer("\n".join(chunk), parse_mode="Markdown")
+                chunk, chunk_len = [], 0
+            chunk.append(line)
+            chunk_len += len(line) + 1
+        if chunk:
+            await message.answer("\n".join(chunk), parse_mode="Markdown")
+    else:
+        await message.answer(full, parse_mode="Markdown")
 
 
 @router.message(Command("admin_ores"))
@@ -500,13 +563,17 @@ async def cmd_admin_ores(message: Message):
     lines = ["🪨 *Daftar Ore ID:*\n"]
     for oid, ore in ORES.items():
         lines.append(f"`{oid}` — {ore['emoji']} {ore['name']} (value: {ore['value']:,})")
-    full = "\n".join(lines)
-    if len(full) > 4000:
-        mid = len(lines) // 2
-        await message.answer("\n".join(lines[:mid]), parse_mode="Markdown")
-        await message.answer("\n".join(lines[mid:]), parse_mode="Markdown")
-    else:
-        await message.answer(full, parse_mode="Markdown")
+    # Kirim dalam chunks agar tidak melebihi batas Telegram 4096 karakter
+    chunk, chunk_len = [], 0
+    for line in lines:
+        line_len = len(line) + 1
+        if chunk_len + line_len > 3800 and chunk:
+            await message.answer("\n".join(chunk), parse_mode="Markdown")
+            chunk, chunk_len = [], 0
+        chunk.append(line)
+        chunk_len += line_len
+    if chunk:
+        await message.answer("\n".join(chunk), parse_mode="Markdown")
 
 
 @router.message(Command("admin_users"))
@@ -611,9 +678,7 @@ async def cb_admin_stats(callback: CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("❌ Bukan admin!", show_alert=True)
         return
-    from database import get_total_users
     total = await get_total_users()
-    from config import TOOLS, ORES, ZONES
     text = (
         "📊 *Statistik Bot*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -622,7 +687,10 @@ async def cb_admin_stats(callback: CallbackQuery):
         f"🪨 Total Ore  : `{len(ORES)}`\n"
         f"🌍 Total Zona : `{len(ZONES)}`\n"
     )
-    await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -631,7 +699,6 @@ async def cb_admin_users(callback: CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("❌ Bukan admin!", show_alert=True)
         return
-    from database import get_all_users
     users = await get_all_users()
     if not users:
         await callback.answer("Tidak ada user.", show_alert=True)
@@ -641,7 +708,10 @@ async def cb_admin_users(callback: CallbackQuery):
         name = u.get("display_name") or u.get("first_name") or f"User {u['user_id']}"
         lines.append(f"• `{u['user_id']}` — {name} (Lv.{u['level']})")
     text = "\n".join(lines)
-    await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
