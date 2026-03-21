@@ -159,7 +159,7 @@ def _build_rare_text(user: dict) -> str:
             ore = ORES.get(ore_id, {})
             avg_kg = _get_ore_avg_kg(user, ore_id)
             total_kg = round(avg_kg * qty, 2)
-            sell_val = calculate_sell_price(ore_id, avg_kg) * qty
+            sell_val = _apply_coin_mult(user, calculate_sell_price(ore_id, avg_kg) * qty)
             lines.append(
                 f"│ {ore.get('emoji','')} *{ore.get('name', ore_id)}*"
                 f" × `{qty}` (~{format_kg(total_kg)})"
@@ -289,25 +289,23 @@ async def cb_bag_rare_page(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("bag_detail_"))
-async def cb_bag_detail(callback: CallbackQuery):
-    ore_id = callback.data.replace("bag_detail_", "")
-    ore    = ORES.get(ore_id)
-    user   = await get_user(callback.from_user.id)
+def _build_ore_detail(user: dict, ore_id: str) -> tuple:
+    """Build teks dan keyboard panel detail ore di Bag.
+    Dipakai oleh cb_bag_detail, cb_fav_toggle, dan cb_museum_toggle
+    agar tampilan selalu sinkron setelah toggle favorit/museum.
+    Return: (text, kb) atau (None, None) jika ore/user tidak valid.
+    """
+    ore = ORES.get(ore_id)
     if not ore or not user:
-        await callback.answer("❌ Ore tidak ditemukan!")
-        return
+        return None, None
 
     qty      = user.get("ore_inventory", {}).get(ore_id, 0)
     avg_kg   = _get_ore_avg_kg(user, ore_id)
     total_kg = round(avg_kg * qty, 2)
     sell_1   = calculate_sell_price(ore_id, avg_kg)
     sell_all = sell_1 * qty
-    fav      = user.get("favorite_ores", [])
-    museum   = user.get("museum_ores", [])
-    in_fav   = ore_id in fav
-    in_mus   = ore_id in museum
-
+    in_fav   = ore_id in user.get("favorite_ores", [])
+    in_mus   = ore_id in user.get("museum_ores", [])
     tier_color = ORE_TIER_COLORS.get(ore.get("tier", "common"), "⬜")
 
     rows = [
@@ -343,6 +341,18 @@ async def cb_bag_detail(callback: CallbackQuery):
         f"{'⭐ Ada di Favorit' if in_fav else ''}"
         f"{'  🏛️ Ada di Museum' if in_mus else ''}"
     )
+    return text, kb
+
+
+@router.callback_query(F.data.startswith("bag_detail_"))
+async def cb_bag_detail(callback: CallbackQuery):
+    ore_id = callback.data.replace("bag_detail_", "")
+    user   = await get_user(callback.from_user.id)
+
+    text, kb = _build_ore_detail(user, ore_id)
+    if text is None:
+        await callback.answer("❌ Ore tidak ditemukan!")
+        return
 
     from database import get_ore_photo
     ore_photo = await get_ore_photo(ore_id)
