@@ -35,13 +35,14 @@ PLAYER_COMMANDS = [
     BotCommand(command="leaderboard", description="🏆 Papan peringkat"),
     BotCommand(command="favorite",    description="⭐ Ore favorit"),
     BotCommand(command="museum",      description="🏛️ Museum ore langka"),
-    BotCommand(command="buyenergy",   description="⚡ Beli tambahan max energy"),
-    BotCommand(command="buyslot",     description="🎒 Beli tambahan slot bag"),
+    BotCommand(command="buyenergy",   description="⚡ Upgrade Max Energy (via Shop)"),
+    BotCommand(command="buyslot",     description="🎒 Upgrade Slot Bag (via Shop)"),
     BotCommand(command="help",        description="❓ Panduan bermain"),
     BotCommand(command="vip",         description="👑 Cek status VIP"),
     BotCommand(command="transfer",    description="📦 Transfer ore ke pemain lain"),
     BotCommand(command="transferinfo", description="📊 Info sisa transfer minggu ini"),
     BotCommand(command="ores",        description="📖 Lihat semua ore per rarity"),
+    BotCommand(command="rare_ore",    description="💎 Lihat ore rare & langka"),
 ]
 
 ADMIN_EXTRA_COMMANDS = [
@@ -76,7 +77,9 @@ ADMIN_EXTRA_COMMANDS = [
 
 async def set_bot_commands(bot: Bot):
     await bot.set_my_commands(PLAYER_COMMANDS, scope=BotCommandScopeDefault())
-    for admin_id in ADMIN_IDS:
+    # Gabungkan admin statis dan dinamis agar semua admin dapat extra commands
+    all_admin_ids = await get_all_admin_ids()
+    for admin_id in all_admin_ids:
         try:
             await bot.set_my_commands(
                 PLAYER_COMMANDS + ADMIN_EXTRA_COMMANDS,
@@ -87,19 +90,21 @@ async def set_bot_commands(bot: Bot):
 
 
 async def main():
+    # Inisialisasi database
     await init_db()
-    await get_all_admin_ids()   # ✅ Load admin dinamis dari DB ke ADMIN_IDS
-    logger.info("✅ Database initialized (v6 ULTIMATE)")
+    await get_all_admin_ids()
+    logger.info("✅ Database initialized")
 
     bot = Bot(token=BOT_TOKEN)
-    # ✅ MemoryStorage diperlukan untuk FSM (registrasi username & setname)
-    dp  = Dispatcher(storage=MemoryStorage())
+    # MemoryStorage: FSM state hilang saat bot restart (normal untuk bot Telegram)
+    # Untuk production skala besar, pertimbangkan RedisStorage
+    dp = Dispatcher(storage=MemoryStorage())
 
-    # ✅ Daftarkan AutoRegisterMiddleware agar user otomatis terdaftar
+    # Middleware auto-register user
     dp.message.middleware(AutoRegisterMiddleware())
     dp.callback_query.middleware(AutoRegisterMiddleware())
 
-    # Register semua router
+    # Register semua router (urutan penting - router lebih spesifik duluan)
     dp.include_router(start.router)
     dp.include_router(mining.router)
     dp.include_router(shop.router)
@@ -116,12 +121,27 @@ async def main():
     dp.include_router(vip.router)
     dp.include_router(transfer.router)
 
-    await set_bot_commands(bot)
-    logger.info("✅ Bot commands set")
+    try:
+        await set_bot_commands(bot)
+        logger.info("✅ Bot commands set")
+    except Exception as e:
+        logger.warning(f"Gagal set bot commands: {e}")
 
-    logger.info("🤖 Mining Bot v6 ULTIMATE starting...")
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    logger.info("🤖 Mining Bot starting...")
+    try:
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        await bot.session.close()
+        logger.info("👋 Bot stopped")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot dihentikan oleh pengguna")
+    except ValueError as e:
+        # Konfigurasi tidak lengkap (BOT_TOKEN / ADMIN_IDS kosong)
+        logger.critical(f"❌ Konfigurasi error: {e}")
+        logger.critical("Pastikan file .env sudah diisi dengan benar!")
+        exit(1)
