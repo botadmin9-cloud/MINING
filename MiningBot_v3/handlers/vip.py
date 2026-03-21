@@ -87,16 +87,16 @@ async def cb_vip_buy(callback: CallbackQuery, state: FSMContext):
 
     text = (
         f"👑 *Paket VIP: {plan['label']}*\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💰 *Harga:* Rp `{plan['price']:,}`\n"
         f"📅 *Durasi:* {plan['label']} ({plan['days']} hari)\n\n"
-        "💳 *Transfer ke:*\n"
+        f"💳 *Transfer ke:*\n"
         f"`{VIP_TRANSFER_INFO}`\n\n"
-        "📝 *Catatan transfer:* `VIP_{plan_id}_{uid}`\n\n"
-        "Setelah transfer, klik tombol di bawah\n"
-        "dan kirim foto bukti transfer.\n\n"
-        "⚠️ VIP akan diaktifkan setelah admin verifikasi (maks 1x24 jam)"
-    ).replace("{plan_id}", plan_id).replace("{uid}", str(uid))
+        f"📝 *Catatan transfer:* `VIP_{plan_id}_{uid}`\n\n"
+        f"Setelah transfer, klik tombol di bawah\n"
+        f"dan kirim foto bukti transfer.\n\n"
+        f"⚠️ VIP akan diaktifkan setelah admin verifikasi (maks 1x24 jam)"
+    )
 
     try:
         await callback.message.edit_text(text, reply_markup=vip_proof_kb(), parse_mode="Markdown")
@@ -186,14 +186,14 @@ async def cb_topup_select(callback: CallbackQuery, state: FSMContext):
 
     text = (
         f"💰 *Top Up: {pkg['label']}*\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🪙 *Koin diterima:* `{pkg['coins']:,}` koin\n\n"
-        "💳 *Transfer ke:*\n"
+        f"💳 *Transfer ke:*\n"
         f"`{TOPUP_TRANSFER_INFO}`\n\n"
         f"📝 *Catatan transfer:* `TOPUP_{pkg_id}_{uid}`\n\n"
-        "Setelah transfer, klik tombol dan kirim foto bukti.\n"
-        "⚠️ Saldo akan ditambahkan setelah admin verifikasi (maks 1x24 jam)"
-    ).replace("{pkg_id}", pkg_id).replace("{uid}", str(uid))
+        f"Setelah transfer, klik tombol dan kirim foto bukti.\n"
+        f"⚠️ Saldo akan ditambahkan setelah admin verifikasi (maks 1x24 jam)"
+    )
 
     try:
         await callback.message.edit_text(text, reply_markup=topup_proof_kb(), parse_mode="Markdown")
@@ -317,7 +317,7 @@ async def cmd_admin_givevip(message: Message):
         await message.answer(
             "❌ Format salah!\n"
             "Gunakan: `/admin_givevip <user_id> <plan_id>`\n\n"
-            "Plan ID: `1_month`, `3_months`, `6_months`, `lifetime`",
+            "Plan ID: `3_days`, `7_days`, `14_days`, `30_days`",
             parse_mode="Markdown"
         )
         return
@@ -333,7 +333,7 @@ async def cmd_admin_givevip(message: Message):
     if not plan:
         await message.answer(
             f"❌ Plan `{plan_id}` tidak ditemukan!\n"
-            "Plan tersedia: `1_month`, `3_months`, `6_months`, `lifetime`",
+            "Plan tersedia: `3_days`, `7_days`, `14_days`, `30_days`",
             parse_mode="Markdown"
         )
         return
