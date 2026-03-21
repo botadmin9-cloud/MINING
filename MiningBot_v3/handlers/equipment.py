@@ -9,7 +9,7 @@ from config import TOOLS, ZONES
 router = Router()
 
 
-@router.message(F.text == "🎒 Equipment")
+@router.message(F.text == "🔧 Equipment")
 @router.message(Command("equipment"))
 async def show_equipment(message: Message):
     user = await get_user(message.from_user.id)
@@ -29,7 +29,7 @@ async def show_equipment(message: Message):
             tools_txt += f"{i}. {t['emoji']} *{t['name']}* (Tier {t['tier']}){active}\n"
 
     text = (
-        f"🎒 *Peralatan Kamu*\n"
+        f"🔧 *Peralatan Kamu*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"⚒️ *Alat Aktif:*\n"
         f"   {tool['emoji']} *{tool['name']}*\n"
