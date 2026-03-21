@@ -43,6 +43,7 @@ PLAYER_COMMANDS = [
     BotCommand(command="transferinfo", description="📊 Info sisa transfer minggu ini"),
     BotCommand(command="ores",        description="📖 Lihat semua ore per rarity"),
     BotCommand(command="rare_ore",    description="💎 Lihat ore rare & langka"),
+    BotCommand(command="links",       description="📢 Link grup & channel official"),
 ]
 
 ADMIN_EXTRA_COMMANDS = [
