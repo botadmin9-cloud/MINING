@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
 
 from config import TOOLS, ZONES, ACHIEVEMENTS, ORES, xp_for_level, ADMIN_IDS, BAG_SLOT_DEFAULT
-from database import get_user, get_user_rank, get_ore_stats, update_user
+from database import get_user, get_user_rank, get_ore_stats, update_user, is_dynamic_admin
 from game import regen_energy, energy_full_in, make_bar
 from keyboards import profile_kb, back_main_kb
 
@@ -19,8 +19,10 @@ class SetNameState(StatesGroup):
     waiting_name = State()
 
 
-def _is_admin(uid: int) -> bool:
-    return uid in ADMIN_IDS
+async def _is_admin(uid: int) -> bool:
+    if uid in ADMIN_IDS:
+        return True
+    return await is_dynamic_admin(uid)
 
 
 @router.message(F.text == "👤 Profil")
@@ -38,7 +40,7 @@ async def show_profile(message: Message):
 async def _send_profile(target, user: dict, tg_user):
     uid = user["user_id"]
     viewer_id = tg_user.id if hasattr(tg_user, "id") else uid
-    if _is_admin(uid) and viewer_id != uid:
+    if await _is_admin(uid) and viewer_id != uid:
         msg = "❌ Profil ini tidak dapat dilihat."
         if isinstance(target, Message):
             await target.answer(msg, reply_markup=back_main_kb())
@@ -72,7 +74,7 @@ async def _send_profile(target, user: dict, tg_user):
     # Hitung kapan bisa ganti nama lagi
     last_change = user.get("last_name_change")
     name_cd_txt = ""
-    if last_change and not _is_admin(uid):
+    if last_change and not await _is_admin(uid):
         try:
             lc_dt = datetime.fromisoformat(last_change)
             next_change = lc_dt + timedelta(days=NAME_CHANGE_COOLDOWN_DAYS)
@@ -86,10 +88,11 @@ async def _send_profile(target, user: dict, tg_user):
         except Exception:
             name_cd_txt = ""
     else:
-        if not _is_admin(uid):
+        if not await _is_admin(uid):
             name_cd_txt = "\n   _(Bisa ganti sekarang!)_"
 
-    admin_badge = " 👑 *[ADMIN]*" if _is_admin(uid) else ""
+    _uid_is_admin = await _is_admin(uid)
+    admin_badge = " 👑 *[ADMIN]*" if _uid_is_admin else ""
     ore_inv   = user.get("ore_inventory", {})
     ore_qty   = sum(v for v in ore_inv.values() if v > 0)
     ore_types = len([k for k, v in ore_inv.items() if v > 0])
@@ -134,7 +137,7 @@ async def cmd_setname(message: Message, state: FSMContext):
         return
 
     # Cek cooldown (admin bebas)
-    if not _is_admin(uid):
+    if not await _is_admin(uid):
         last_change = user.get("last_name_change")
         if last_change:
             try:
@@ -171,7 +174,9 @@ async def cmd_cancel(message: Message, state: FSMContext):
     current = await state.get_state()
     if current:
         await state.clear()
-        await message.answer("❌ Dibatalkan.")
+        await message.answer("❌ Proses dibatalkan.", reply_markup=None)
+    else:
+        await message.answer("ℹ️ Tidak ada proses yang aktif saat ini.")
 
 
 @router.message(SetNameState.waiting_name)
@@ -202,7 +207,10 @@ async def cb_mine_stats(callback: CallbackQuery):
         for s in stats[:12]:
             lines.append(f"  {s['ore_name']}: `{s['cnt']}x`")
         text = "\n".join(lines)
-    await callback.message.edit_text(text, reply_markup=back_main_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(text, reply_markup=back_main_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -213,11 +221,37 @@ async def cb_achievements(callback: CallbackQuery):
         await callback.answer("Ketik /start!")
         return
     achieved = user["achievements"]
-    lines = ["🏅 *Daftar Prestasi:*\n"]
+    done_count = len(achieved)
+    total_count = len(ACHIEVEMENTS)
+
+    # Split into: unlocked (✅) and locked (⬜) — show unlocked first
+    unlocked_lines = []
+    locked_lines   = []
     for ach_id, ach in ACHIEVEMENTS.items():
-        done = ach_id in achieved
-        lines.append(f"{'✅' if done else '⬜'} *{ach['name']}*\n   _{ach['desc']}_ (+{ach['reward']:,}🪙)")
-    await callback.message.edit_text("\n".join(lines), reply_markup=back_main_kb(), parse_mode="Markdown")
+        if ach_id in achieved:
+            unlocked_lines.append(f"✅ *{ach['name']}* (+{ach['reward']:,}🪙)")
+        else:
+            locked_lines.append(f"⬜ *{ach['name']}*\n   _{ach['desc']}_")
+
+    header = [f"🏅 *Prestasi: {done_count}/{total_count}*\n━━━━━━━━━━━━━━━━━━━━\n"]
+    if unlocked_lines:
+        header.append("*✅ Sudah Didapat:*")
+        header.extend(unlocked_lines)
+        header.append("")
+    if locked_lines:
+        header.append("*⬜ Belum Didapat:*")
+        header.extend(locked_lines[:20])  # max 20 locked shown
+        if len(locked_lines) > 20:
+            header.append(f"_...dan {len(locked_lines)-20} prestasi lagi_")
+
+    text = "\n".join(header)
+    # Telegram hard limit: truncate if needed
+    if len(text) > 4000:
+        text = text[:3990] + "\n_...(terpotong)_"
+    try:
+        await callback.message.edit_text(text, reply_markup=back_main_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -229,9 +263,12 @@ async def cb_ore_inv_view(callback: CallbackQuery):
         return
     ore_inv = {k: v for k, v in user.get("ore_inventory", {}).items() if v > 0}
     if not ore_inv:
-        await callback.message.edit_text(
-            "📦 *Inventory Ore Kosong!*\n\nMulai mining untuk mengumpulkan ore.",
-            reply_markup=back_main_kb(), parse_mode="Markdown")
+        try:
+            await callback.message.edit_text(
+                "📦 *Inventory Ore Kosong!*\n\nMulai mining untuk mengumpulkan ore.",
+                reply_markup=back_main_kb(), parse_mode="Markdown")
+        except Exception:
+            pass
         await callback.answer()
         return
     sorted_ores = sorted(ore_inv.items(), key=lambda x: ORES.get(x[0], {}).get("value", 0), reverse=True)
@@ -242,5 +279,8 @@ async def cb_ore_inv_view(callback: CallbackQuery):
     if len(sorted_ores) > 15:
         lines.append(f"\n_...dan {len(sorted_ores)-15} jenis lainnya_")
     lines.append("\n💡 Kelola ore di *🎒 Bag*!")
-    await callback.message.edit_text("\n".join(lines), reply_markup=back_main_kb(), parse_mode="Markdown")
+    try:
+        await callback.message.edit_text("\n".join(lines), reply_markup=back_main_kb(), parse_mode="Markdown")
+    except Exception:
+        pass
     await callback.answer()
