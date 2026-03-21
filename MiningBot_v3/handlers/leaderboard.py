@@ -11,7 +11,7 @@ router = Router()
 MEDALS = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
 
 LB_FIELDS = {
-    "balance":    ("💰 Total Saldo", "total_earned"),
+    "balance":    ("💰 Total Koin Didapat", "total_earned"),  # FIX: sort by total_earned bukan balance
     "mine_count": ("⛏️ Total Mining", "mine_count"),
     "total_kg":   ("⚖️ Total KG",     "total_kg_mined"),
     "ore_count":  ("🪨 Total Ore",    "total_mined"),
@@ -66,8 +66,8 @@ async def cb_lb_switch(callback: CallbackQuery):
 
 
 async def _build_lb(user_id: int, field: str = "balance", period: str = "weekly") -> str:
-    db_field = LB_FIELDS.get(field, ("💰 Total Saldo", "total_earned"))[1]
-    label    = LB_FIELDS.get(field, ("💰 Total Saldo", "total_earned"))[0]
+    db_field = LB_FIELDS.get(field, ("💰 Total Koin Didapat", "total_earned"))[1]
+    label    = LB_FIELDS.get(field, ("💰 Total Koin Didapat", "total_earned"))[0]
     leaders  = await get_leaderboard_by(db_field, 10)
     rank     = await get_user_rank(user_id)
 
