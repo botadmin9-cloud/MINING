@@ -18,6 +18,7 @@ from database import (get_user, update_user, get_all_users, get_total_users,
                        is_dynamic_admin, reset_all_users,
                        ban_user, unban_user)
 from keyboards import admin_kb, back_main_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -113,7 +114,8 @@ async def cmd_adminhelp(message: Message):
         "• Admin otomatis terdeteksi dari ADMIN_IDS di .env",
     ]
     text = "\n".join(lines)
-    await message.answer(text, parse_mode="HTML")
+    _sent = await message.answer(text, parse_mode="HTML")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_setphoto"))
@@ -124,17 +126,20 @@ async def cmd_setphoto(message: Message):
         photo = message.reply_to_message.photo[-1]
         caption = message.text.replace("/admin_setphoto", "").strip() or ""
         await save_admin_photo(message.from_user.id, photo.file_id, caption)
-        await message.answer(f"✅ *Foto berhasil disimpan!*\n📸 `{photo.file_id}`", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ *Foto berhasil disimpan!*\n📸 `{photo.file_id}`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     elif message.photo:
         photo = message.photo[-1]
         caption = message.caption or ""
         await save_admin_photo(message.from_user.id, photo.file_id, caption)
-        await message.answer(f"✅ *Foto berhasil disimpan!*", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ *Foto berhasil disimpan!*", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(
+        _sent = await message.answer(
             "📸 Reply foto dengan `/admin_setphoto [caption]`\natau kirim foto dengan caption `/admin_setphoto`.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.photo & F.caption.startswith("/admin_setphoto"))
@@ -144,7 +149,8 @@ async def cmd_setphoto_direct(message: Message):
     photo = message.photo[-1]
     caption = (message.caption or "").replace("/admin_setphoto", "").strip()
     await save_admin_photo(message.from_user.id, photo.file_id, caption)
-    await message.answer(f"✅ *Foto berhasil disimpan!*", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ *Foto berhasil disimpan!*", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_myphotos"))
@@ -153,9 +159,11 @@ async def cmd_myphotos(message: Message):
         return
     photos = await get_admin_photos(message.from_user.id)
     if not photos:
-        await message.answer("📸 Belum ada foto.", parse_mode="Markdown")
+        _sent = await message.answer("📸 Belum ada foto.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
-    await message.answer(f"📸 *Foto Admin ({len(photos)}):*", parse_mode="Markdown")
+    _sent = await message.answer(f"📸 *Foto Admin ({len(photos)}):*", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     for p in photos[:5]:
         caption = p.get("caption", "") or "_(tanpa caption)_"
         await message.bot.send_photo(
@@ -171,15 +179,18 @@ async def cmd_deletephoto(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer("Penggunaan: `/admin_deletephoto <id>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_deletephoto <id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         photo_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ ID harus angka!")
+        _sent = await message.answer("❌ ID harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await delete_admin_photo(photo_id, message.from_user.id)
-    await message.answer(f"✅ Foto ID `{photo_id}` dihapus.", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ Foto ID `{photo_id}` dihapus.", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_stats"))
@@ -203,7 +214,8 @@ async def cmd_admin_stats(message: Message):
         f"⛏️ Total Mine    : `{total_mined:,}` kali\n\n"
         f"🏆 Top 3 Earner:\n{top_txt}"
     )
-    await message.answer(text, parse_mode="Markdown")
+    _sent = await message.answer(text, parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_info"))
@@ -212,16 +224,19 @@ async def cmd_admin_info(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer("Penggunaan: `/admin_info <user_id>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_info <user_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user = await get_user(uid)
     if not user:
-        await message.answer(f"❌ User `{uid}` tidak ditemukan.")
+        _sent = await message.answer(f"❌ User `{uid}` tidak ditemukan.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     ore_count = sum(user.get("ore_inventory", {}).values())
@@ -241,7 +256,8 @@ async def cmd_admin_info(message: Message):
         f"Ore Inv   : `{ore_count}` buah total\n"
         f"Bag Slots : `{user.get('bag_slots',50)}`"
     )
-    await message.answer(text, parse_mode="Markdown")
+    _sent = await message.answer(text, parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_addcoin"))
@@ -250,30 +266,35 @@ async def cmd_addcoin(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 3:
-        await message.answer("Penggunaan: `/admin_addcoin <user_id> <jumlah>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_addcoin <user_id> <jumlah>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid, amount = int(parts[1]), int(parts[2])
     except ValueError:
-        await message.answer("❌ Format salah! Gunakan angka.")
+        _sent = await message.answer("❌ Format salah! Gunakan angka.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     # Clamp: max 1 triliun per grant, boleh negatif (debit) tapi max -1M
     MAX_GRANT = 1_000_000_000_000
     if abs(amount) > MAX_GRANT:
-        await message.answer(f"❌ Jumlah terlalu besar! Maksimal: `{MAX_GRANT:,}`", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Jumlah terlalu besar! Maksimal: `{MAX_GRANT:,}`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user = await get_user(uid)
     if not user:
-        await message.answer(f"❌ User `{uid}` tidak ditemukan!")
+        _sent = await message.answer(f"❌ User `{uid}` tidak ditemukan!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await add_balance(uid, amount, f"Admin grant by {message.from_user.id}")
     user_after = await get_user(uid)
     action = "+" if amount >= 0 else ""
-    await message.answer(
+    _sent = await message.answer(
         f"✅ `{action}{amount:,}` koin → user `{uid}`\n"
         f"💰 Saldo baru: `{user_after['balance']:,}` koin",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_setlevel"))
@@ -282,20 +303,24 @@ async def cmd_setlevel(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 3:
-        await message.answer("Penggunaan: `/admin_setlevel <user_id> <level>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_setlevel <user_id> <level>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid, lv = int(parts[1]), int(parts[2])
     except ValueError:
-        await message.answer("❌ Format salah!")
+        _sent = await message.answer("❌ Format salah!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     lv = max(1, min(lv, MAX_LEVEL))
     user = await get_user(uid)
     if not user:
-        await message.answer(f"❌ User `{uid}` tidak ditemukan!")
+        _sent = await message.answer(f"❌ User `{uid}` tidak ditemukan!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await update_user(uid, level=lv, xp=0)
-    await message.answer(f"✅ Level user `{uid}` → `{lv}`", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ Level user `{uid}` → `{lv}`", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_setenergy"))
@@ -304,22 +329,26 @@ async def cmd_setenergy(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 3:
-        await message.answer("Penggunaan: `/admin_setenergy <user_id> <jumlah>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_setenergy <user_id> <jumlah>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid, en = int(parts[1]), int(parts[2])
     except ValueError:
-        await message.answer("❌ Format salah!")
+        _sent = await message.answer("❌ Format salah!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user = await get_user(uid)
     if not user:
-        await message.answer("❌ User tidak ditemukan!")
+        _sent = await message.answer("❌ User tidak ditemukan!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     # ✅ Cap energy ke max_energy user yang sebenarnya
     max_e = user.get("max_energy", 500)
     new_e = max(0, min(en, max_e))
     await update_user(uid, energy=new_e)
-    await message.answer(f"✅ Energy user `{uid}` → `{new_e}/{max_e}`", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ Energy user `{uid}` → `{new_e}/{max_e}`", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_givetool"))
@@ -328,20 +357,24 @@ async def cmd_givetool(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 3:
-        await message.answer("Penggunaan: `/admin_givetool <user_id> <tool_id>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_givetool <user_id> <tool_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     tool_id = parts[2]
     if tool_id not in TOOLS:
-        await message.answer(f"❌ tool_id tidak valid. Cek `/admin_tools`", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ tool_id tidak valid. Cek `/admin_tools`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     from game import buy_tool
     ok, msg = await buy_tool(uid, tool_id, admin=True)
-    await message.answer(f"{'✅' if ok else '❌'} {msg}", parse_mode="Markdown")
+    _sent = await message.answer(f"{'✅' if ok else '❌'} {msg}", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_giveitem"))
@@ -350,12 +383,14 @@ async def cmd_giveitem(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 3:
-        await message.answer("Penggunaan: `/admin_giveitem <user_id> <item_id> [qty]`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_giveitem <user_id> <item_id> [qty]`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     item_id = parts[2]
     try:
@@ -363,16 +398,19 @@ async def cmd_giveitem(message: Message):
     except ValueError:
         qty = 1
     if item_id not in ITEMS:
-        await message.answer(f"❌ item_id tidak valid. Cek `/admin_items`", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ item_id tidak valid. Cek `/admin_items`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user = await get_user(uid)
     if not user:
-        await message.answer("❌ User tidak ditemukan!")
+        _sent = await message.answer("❌ User tidak ditemukan!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     inv = dict(user["inventory"])
     inv[item_id] = inv.get(item_id, 0) + qty
     await update_user(uid, inventory=inv)
-    await message.answer(f"✅ `{qty}x {ITEMS[item_id]['name']}` → user `{uid}`", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ `{qty}x {ITEMS[item_id]['name']}` → user `{uid}`", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_giveore"))
@@ -382,25 +420,30 @@ async def cmd_giveore(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 4:
-        await message.answer("Penggunaan: `/admin_giveore <user_id> <ore_id> <qty>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_giveore <user_id> <ore_id> <qty>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ore_id = parts[2]
     try:
         qty = int(parts[3])
     except ValueError:
-        await message.answer("❌ qty harus angka!")
+        _sent = await message.answer("❌ qty harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     if ore_id not in ORES:
-        await message.answer(f"❌ ore_id tidak valid. Cek `/admin_ores`", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ ore_id tidak valid. Cek `/admin_ores`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user = await get_user(uid)
     if not user:
-        await message.answer("❌ User tidak ditemukan!")
+        _sent = await message.answer("❌ User tidak ditemukan!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ore = ORES[ore_id]
     # Cek kapasitas bag user (admin bisa override, tapi beri warning)
@@ -415,10 +458,11 @@ async def cmd_giveore(message: Message):
     unit_kg = ore.get("kg_min", 0.5)
     avg_kg  = round(unit_kg * qty, 2)
     await add_ore_to_inventory(uid, ore_id, qty, avg_kg)
-    await message.answer(
+    _sent = await message.answer(
         f"✅ `{qty}x {ore['emoji']} {ore['name']}` → user `{uid}`{bag_note}",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_givezone"))
@@ -427,17 +471,20 @@ async def cmd_givezone(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 3:
-        await message.answer("Penggunaan: `/admin_givezone <user_id> <zone_id>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_givezone <user_id> <zone_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     zone_id = parts[2]
     from game import unlock_zone
     ok, msg = await unlock_zone(uid, zone_id, admin=True)
-    await message.answer(f"{'✅' if ok else '❌'} {msg}", parse_mode="Markdown")
+    _sent = await message.answer(f"{'✅' if ok else '❌'} {msg}", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_reset"))
@@ -446,12 +493,14 @@ async def cmd_reset(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer("Penggunaan: `/admin_reset <user_id>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_reset <user_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     from config import STARTING_BALANCE
     # ✅ Reset semua field ke nilai awal (lengkap)
@@ -473,7 +522,8 @@ async def cmd_reset(message: Message):
         last_name_change=None,
         is_mining_multi=0, mining_multi_type=None, mining_multi_started=None
     )
-    await message.answer(f"✅ User `{uid}` berhasil direset.", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ User `{uid}` berhasil direset.", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_broadcast"))
@@ -482,7 +532,8 @@ async def cmd_broadcast(message: Message):
         return
     text = message.text.replace("/admin_broadcast", "").strip()
     if not text:
-        await message.answer("Penggunaan: `/admin_broadcast <pesan>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_broadcast <pesan>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     users = await get_all_users()
     sent = failed = 0
@@ -513,7 +564,8 @@ async def cmd_broadcast(message: Message):
             parse_mode="Markdown"
         )
     except Exception:
-        await message.answer(f"✅ Broadcast selesai!\nTerkirim: `{sent}` | Gagal: `{failed}`", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ Broadcast selesai!\nTerkirim: `{sent}` | Gagal: `{failed}`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_tools"))
@@ -528,10 +580,13 @@ async def cmd_admin_tools(message: Message):
     full = "\n".join(lines)
     if len(full) > 4000:
         mid = len(lines) // 2
-        await message.answer("\n".join(lines[:mid]), parse_mode="Markdown")
-        await message.answer("\n".join(lines[mid:]), parse_mode="Markdown")
+        _sent = await message.answer("\n".join(lines[:mid]), parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
+        _sent = await message.answer("\n".join(lines[mid:]), parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(full, parse_mode="Markdown")
+        _sent = await message.answer(full, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_items"))
@@ -544,10 +599,13 @@ async def cmd_admin_items(message: Message):
     full = "\n".join(lines)
     if len(full) > 4000:
         mid = len(lines) // 2
-        await message.answer("\n".join(lines[:mid]), parse_mode="Markdown")
-        await message.answer("\n".join(lines[mid:]), parse_mode="Markdown")
+        _sent = await message.answer("\n".join(lines[:mid]), parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
+        _sent = await message.answer("\n".join(lines[mid:]), parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(full, parse_mode="Markdown")
+        _sent = await message.answer(full, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_zones"))
@@ -562,14 +620,17 @@ async def cmd_admin_zones(message: Message):
         chunk, chunk_len = [], 0
         for line in lines:
             if chunk_len + len(line) + 1 > 3800 and chunk:
-                await message.answer("\n".join(chunk), parse_mode="Markdown")
+                _sent = await message.answer("\n".join(chunk), parse_mode="Markdown")
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
                 chunk, chunk_len = [], 0
             chunk.append(line)
             chunk_len += len(line) + 1
         if chunk:
-            await message.answer("\n".join(chunk), parse_mode="Markdown")
+            _sent = await message.answer("\n".join(chunk), parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(full, parse_mode="Markdown")
+        _sent = await message.answer(full, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_ores"))
@@ -584,12 +645,14 @@ async def cmd_admin_ores(message: Message):
     for line in lines:
         line_len = len(line) + 1
         if chunk_len + line_len > 3800 and chunk:
-            await message.answer("\n".join(chunk), parse_mode="Markdown")
+            _sent = await message.answer("\n".join(chunk), parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
             chunk, chunk_len = [], 0
         chunk.append(line)
         chunk_len += line_len
     if chunk:
-        await message.answer("\n".join(chunk), parse_mode="Markdown")
+        _sent = await message.answer("\n".join(chunk), parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_users"))
@@ -603,7 +666,8 @@ async def cmd_admin_users(message: Message):
         lines.append(f"`{u['user_id']}` {name} Lv.{u['level']} — {u.get('balance',0):,}🪙")
     if len(users) > 20:
         lines.append(f"\n_...dan {len(users)-20} lainnya_")
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(lines), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_setorephoto"))
@@ -624,21 +688,25 @@ async def cmd_setorephoto(message: Message):
         photo = message.photo[-1]
 
     if not ore_id_arg:
-        await message.answer("Cara: reply foto/GIF dengan `/admin_setorephoto <ore_id>`", parse_mode="Markdown")
+        _sent = await message.answer("Cara: reply foto/GIF dengan `/admin_setorephoto <ore_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     if not photo:
-        await message.answer("❌ Tidak ada foto/GIF! Reply foto atau GIF dengan perintah ini.", parse_mode="Markdown")
+        _sent = await message.answer("❌ Tidak ada foto/GIF! Reply foto atau GIF dengan perintah ini.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     ore = ORES.get(ore_id_arg)
     if not ore:
-        await message.answer(f"❌ Ore ID `{ore_id_arg}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Ore ID `{ore_id_arg}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     caption = " ".join(parts[2:]) if len(parts) > 2 else ""
     await set_ore_photo(ore_id_arg, photo.file_id, caption, message.from_user.id)
     kind = "GIF" if is_animation else "Foto"
-    await message.answer(f"✅ {kind} {ore['emoji']} *{ore['name']}* dipasang!", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ {kind} {ore['emoji']} *{ore['name']}* dipasang!", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.photo & F.caption.regexp(r"^/admin_setorephoto"))
@@ -648,16 +716,19 @@ async def cmd_setorephoto_direct(message: Message):
     parts = message.caption.split() if message.caption else []
     ore_id_arg = parts[1] if len(parts) > 1 else None
     if not ore_id_arg:
-        await message.answer("❌ Sertakan ore_id.", parse_mode="Markdown")
+        _sent = await message.answer("❌ Sertakan ore_id.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ore = ORES.get(ore_id_arg)
     if not ore:
-        await message.answer(f"❌ Ore ID `{ore_id_arg}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Ore ID `{ore_id_arg}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     photo = message.photo[-1]
     caption = " ".join(parts[2:]) if len(parts) > 2 else ""
     await set_ore_photo(ore_id_arg, photo.file_id, caption, message.from_user.id)
-    await message.answer(f"✅ Foto {ore['emoji']} *{ore['name']}* dipasang!", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ Foto {ore['emoji']} *{ore['name']}* dipasang!", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_listorephoto"))
@@ -666,13 +737,15 @@ async def cmd_listorephoto(message: Message):
         return
     photos = await get_all_ore_photos()
     if not photos:
-        await message.answer("📸 Belum ada foto ore.", parse_mode="Markdown")
+        _sent = await message.answer("📸 Belum ada foto ore.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     lines = [f"📸 *Foto Ore ({len(photos)}):*\n"]
     for p in photos:
         ore = ORES.get(p["ore_id"], {})
         lines.append(f"{ore.get('emoji','')} `{p['ore_id']}` — {ore.get('name', p['ore_id'])}")
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(lines), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_delorephoto"))
@@ -681,16 +754,19 @@ async def cmd_delorephoto(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer("Penggunaan: `/admin_delorephoto <ore_id>`", parse_mode="Markdown")
+        _sent = await message.answer("Penggunaan: `/admin_delorephoto <ore_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ore_id = parts[1]
     photo = await get_ore_photo(ore_id)
     if not photo:
-        await message.answer(f"❌ Tidak ada foto untuk ore `{ore_id}`.", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Tidak ada foto untuk ore `{ore_id}`.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await delete_ore_photo(ore_id)
     ore = ORES.get(ore_id, {})
-    await message.answer(f"✅ Foto {ore.get('emoji','')} *{ore.get('name', ore_id)}* dihapus.", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ Foto {ore.get('emoji','')} *{ore.get('name', ore_id)}* dihapus.", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ── INLINE CALLBACK for admin panel ──────────────────────────
@@ -746,7 +822,7 @@ async def cmd_settoolphoto(message: Message):
         return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "ℹ️ *Cara pasang foto alat:*\n\n"
             "1. Reply foto dengan `/admin_settoolphoto [tool_id]`\n"
             "2. Atau kirim foto dengan caption `/admin_settoolphoto [tool_id]`\n\n"
@@ -754,10 +830,12 @@ async def cmd_settoolphoto(message: Message):
             "Gunakan `/admin_tools` untuk melihat semua tool_id.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     tool_id = args[1].strip()
     if tool_id not in TOOLS:
-        await message.answer(f"❌ Tool `{tool_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Tool `{tool_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     photo = None
@@ -776,18 +854,20 @@ async def cmd_settoolphoto(message: Message):
         caption = message.caption or ""
 
     if not photo:
-        await message.answer("❌ Kirim/reply foto atau GIF bersamaan dengan perintah!")
+        _sent = await message.answer("❌ Kirim/reply foto atau GIF bersamaan dengan perintah!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     tool = TOOLS[tool_id]
     await set_tool_photo(tool_id, photo.file_id, caption, message.from_user.id)
     kind = "GIF" if is_animation else "Foto"
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *{kind} alat berhasil dipasang!*\n\n"
         f"🔧 Alat: *{tool['name']}*\n"
         f"🆔 ID: `{tool_id}`",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_listtoolphoto"))
@@ -796,7 +876,8 @@ async def cmd_listtoolphoto(message: Message):
         return
     photos = await get_all_tool_photos()
     if not photos:
-        await message.answer("📋 Belum ada foto alat yang dipasang.")
+        _sent = await message.answer("📋 Belum ada foto alat yang dipasang.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     lines = ["📋 *Daftar Alat Berphoto:*\n"]
     for p in photos:
@@ -806,7 +887,8 @@ async def cmd_listtoolphoto(message: Message):
             f"  ID: `{p['tool_id']}`\n"
             f"  Caption: _{p.get('caption','') or 'Tidak ada'}_"
         )
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(lines), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_deltoolphoto"))
@@ -815,14 +897,17 @@ async def cmd_deltoolphoto(message: Message):
         return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("❌ Format: `/admin_deltoolphoto [tool_id]`", parse_mode="Markdown")
+        _sent = await message.answer("❌ Format: `/admin_deltoolphoto [tool_id]`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     tool_id = args[1].strip()
     ok = await delete_tool_photo(tool_id)
     if ok:
-        await message.answer(f"✅ Foto alat `{tool_id}` berhasil dihapus!", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ Foto alat `{tool_id}` berhasil dihapus!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(f"❌ Foto alat `{tool_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Foto alat `{tool_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -834,7 +919,7 @@ async def cmd_setzonephoto(message: Message):
         return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "ℹ️ *Cara pasang foto zona:*\n\n"
             "1. Reply foto dengan `/admin_setzonephoto [zone_id]`\n"
             "2. Atau kirim foto dengan caption `/admin_setzonephoto [zone_id]`\n\n"
@@ -842,10 +927,12 @@ async def cmd_setzonephoto(message: Message):
             "Gunakan `/admin_zones` untuk melihat semua zone_id.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     zone_id = args[1].strip()
     if zone_id not in ZONES:
-        await message.answer(f"❌ Zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     photo = None
@@ -864,18 +951,20 @@ async def cmd_setzonephoto(message: Message):
         caption = message.caption or ""
 
     if not photo:
-        await message.answer("❌ Kirim/reply foto atau GIF bersamaan dengan perintah!")
+        _sent = await message.answer("❌ Kirim/reply foto atau GIF bersamaan dengan perintah!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     zone = ZONES[zone_id]
     await set_zone_photo(zone_id, photo.file_id, caption, message.from_user.id)
     kind = "GIF" if is_animation else "Foto"
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *{kind} zona berhasil dipasang!*\n\n"
         f"📍 Zona: *{zone['name']}*\n"
         f"🆔 ID: `{zone_id}`",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_listzonephoto"))
@@ -884,7 +973,8 @@ async def cmd_listzonephoto(message: Message):
         return
     photos = await get_all_zone_photos()
     if not photos:
-        await message.answer("📋 Belum ada foto zona yang dipasang.")
+        _sent = await message.answer("📋 Belum ada foto zona yang dipasang.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     lines = ["📋 *Daftar Zona Berphoto:*\n"]
     for p in photos:
@@ -894,7 +984,8 @@ async def cmd_listzonephoto(message: Message):
             f"  ID: `{p['zone_id']}`\n"
             f"  Caption: _{p.get('caption','') or 'Tidak ada'}_"
         )
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(lines), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_delzonephoto"))
@@ -903,14 +994,17 @@ async def cmd_delzonephoto(message: Message):
         return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("❌ Format: `/admin_delzonephoto [zone_id]`", parse_mode="Markdown")
+        _sent = await message.answer("❌ Format: `/admin_delzonephoto [zone_id]`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     zone_id = args[1].strip()
     ok = await delete_zone_photo(zone_id)
     if ok:
-        await message.answer(f"✅ Foto zona `{zone_id}` berhasil dihapus!", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ Foto zona `{zone_id}` berhasil dihapus!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(f"❌ Foto zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Foto zona `{zone_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -924,7 +1018,7 @@ async def cmd_addadmin(message: Message):
         return  # Hanya super-admin yang bisa tambah admin
     parts = message.text.split(None, 2)
     if len(parts) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "ℹ️ *Cara tambah admin:*\n\n"
             "`/admin_addadmin <user_id> [catatan]`\n\n"
             "Contoh:\n"
@@ -932,25 +1026,29 @@ async def cmd_addadmin(message: Message):
             "`/admin_addadmin 123456789 Admin backup`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        _sent = await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     if target_id in STATIC_ADMIN_IDS:
-        await message.answer(
+        _sent = await message.answer(
             f"⚠️ User `{target_id}` sudah menjadi super-admin (dari .env).",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     note = parts[2] if len(parts) > 2 else ""
     already = await is_dynamic_admin(target_id)
     if already:
-        await message.answer(
+        _sent = await message.answer(
             f"⚠️ User `{target_id}` sudah terdaftar sebagai admin dinamis.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await add_dynamic_admin(target_id, message.from_user.id, note)
     # Refresh ADMIN_IDS global
@@ -960,13 +1058,14 @@ async def cmd_addadmin(message: Message):
     name = ""
     if user_info:
         name = f" ({user_info.get('display_name') or user_info.get('first_name', '')})"
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *Admin baru berhasil ditambahkan!*\n\n"
         f"👤 User ID: `{target_id}`{name}\n"
         f"📝 Catatan: _{note or 'Tidak ada'}_\n"
         f"👑 Ditambahkan oleh: `{message.from_user.id}`",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_removeadmin"))
@@ -976,35 +1075,40 @@ async def cmd_removeadmin(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "ℹ️ Cara hapus admin:\n`/admin_removeadmin <user_id>`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     if target_id in STATIC_ADMIN_IDS:
-        await message.answer(
+        _sent = await message.answer(
             f"❌ Tidak bisa hapus super-admin `{target_id}` (didefinisikan di .env).",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ok = await remove_dynamic_admin(target_id)
     # Refresh ADMIN_IDS global
     from config import get_all_admin_ids
     await get_all_admin_ids()
     if ok:
-        await message.answer(
+        _sent = await message.answer(
             f"✅ Admin `{target_id}` berhasil dihapus.", parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(
+        _sent = await message.answer(
             f"❌ User `{target_id}` tidak ditemukan di daftar admin dinamis.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_listadmin"))
@@ -1033,7 +1137,8 @@ async def cmd_listadmin(message: Message):
         "\n💡 Gunakan `/admin_addadmin <user_id>` untuk tambah admin\n"
         "💡 Gunakan `/admin_removeadmin <user_id>` untuk hapus admin"
     )
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(lines), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1044,12 +1149,13 @@ async def cmd_listadmin(message: Message):
 async def cmd_resetall(message: Message):
     """Reset SEMUA data pemain ke nilai awal. Hanya super-admin."""
     if message.from_user.id not in STATIC_ADMIN_IDS:
-        await message.answer("❌ Perintah ini hanya untuk super-admin!", parse_mode="Markdown")
+        _sent = await message.answer("❌ Perintah ini hanya untuk super-admin!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     # Konfirmasi pertama
     parts = message.text.split()
     if len(parts) < 2 or parts[1].upper() != "KONFIRMASI":
-        await message.answer(
+        _sent = await message.answer(
             "⚠️ *PERINGATAN KERAS!*\n\n"
             "Perintah ini akan *mereset semua data pemain* ke nilai awal:\n"
             "• Balance → 1,000 koin\n"
@@ -1061,17 +1167,20 @@ async def cmd_resetall(message: Message):
             "Ketik `/admin_resetall KONFIRMASI` untuk melanjutkan.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
-    await message.answer("⏳ Mereset semua data pemain...", parse_mode="Markdown")
+    _sent = await message.answer("⏳ Mereset semua data pemain...", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     count = await reset_all_users()
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *Reset selesai!*\n\n"
         f"👥 Total pemain direset: `{count}`\n"
         f"🗑️ Mining log, transaksi & market listing dihapus.\n"
         f"⚙️ Semua pemain kembali ke awal.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1085,34 +1194,39 @@ async def cmd_ban_user(message: Message):
         return
     parts = message.text.split(None, 2)
     if len(parts) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "ℹ️ *Format:* `/admin_ban <user_id> [alasan]`\n\n"
             "Contoh:\n`/admin_ban 123456789 Cheating`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     if target_id in STATIC_ADMIN_IDS:
-        await message.answer("❌ Tidak bisa ban super-admin!")
+        _sent = await message.answer("❌ Tidak bisa ban super-admin!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     reason = parts[2] if len(parts) > 2 else "Tidak ada alasan"
     user_info = await get_user(target_id)
     if not user_info:
-        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await ban_user(target_id, reason)
     name = user_info.get("display_name") or user_info.get("first_name", "-")
-    await message.answer(
+    _sent = await message.answer(
         f"🚫 *User berhasil dibanned!*\n\n"
         f"👤 Nama: *{name}*\n"
         f"🆔 ID: `{target_id}`\n"
         f"📋 Alasan: _{reason}_",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_unban"))
@@ -1122,31 +1236,36 @@ async def cmd_unban_user(message: Message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "ℹ️ *Format:* `/admin_unban <user_id>`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!")
+        _sent = await message.answer("❌ user_id harus angka!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user_info = await get_user(target_id)
     if not user_info:
-        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ok = await unban_user(target_id)
     name = user_info.get("display_name") or user_info.get("first_name", "-")
     if ok:
-        await message.answer(
+        _sent = await message.answer(
             f"✅ *User berhasil di-unban!*\n\n"
             f"👤 Nama: *{name}*\n"
             f"🆔 ID: `{target_id}`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(f"⚠️ User `{target_id}` tidak dalam status banned.", parse_mode="Markdown")
+        _sent = await message.answer(f"⚠️ User `{target_id}` tidak dalam status banned.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1159,16 +1278,18 @@ async def cmd_setitemphoto(message: Message):
         return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "📸 *Format:* Reply foto dengan `/admin_setitemphoto <item_id>`\n\n"
             "Gunakan /admin_items untuk lihat daftar item_id.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     item_id = args[1].strip()
     from config import ITEMS
     if item_id not in ITEMS:
-        await message.answer(f"❌ item_id `{item_id}` tidak ditemukan!\nGunakan /admin_items.", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ item_id `{item_id}` tidak ditemukan!\nGunakan /admin_items.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     if message.reply_to_message and message.reply_to_message.photo:
         photo = message.reply_to_message.photo[-1]
@@ -1176,19 +1297,22 @@ async def cmd_setitemphoto(message: Message):
         photo = message.reply_to_message.animation
         await set_item_photo(item_id, photo.file_id, "", message.from_user.id)
         item = ITEMS.get(item_id, {})
-        await message.answer(f"✅ GIF item *{item.get('name', item_id)}* berhasil dipasang!", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ GIF item *{item.get('name', item_id)}* berhasil dipasang!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     else:
-        await message.answer("❌ Reply ke foto/GIF item dulu!", parse_mode="Markdown")
+        _sent = await message.answer("❌ Reply ke foto/GIF item dulu!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     caption = " ".join(args[2:]) if len(args) > 2 else ""
     await set_item_photo(item_id, photo.file_id, caption, message.from_user.id)
     item = ITEMS.get(item_id, {})
-    await message.answer(
+    _sent = await message.answer(
         f"✅ Foto item *{item.get('name', item_id)}* berhasil dipasang!\n"
         f"🆔 item_id: `{item_id}`",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.photo & F.caption.regexp(r"^/admin_setitemphoto\s+\S+"))
@@ -1199,13 +1323,15 @@ async def cmd_setitemphoto_direct(message: Message):
     item_id = args[1].strip() if len(args) > 1 else ""
     from config import ITEMS
     if item_id not in ITEMS:
-        await message.answer(f"❌ item_id `{item_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ item_id `{item_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     photo = message.photo[-1]
     caption = " ".join(args[2:]) if len(args) > 2 else ""
     await set_item_photo(item_id, photo.file_id, caption, message.from_user.id)
     item = ITEMS.get(item_id, {})
-    await message.answer(f"✅ Foto item *{item.get('name', item_id)}* berhasil dipasang!", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ Foto item *{item.get('name', item_id)}* berhasil dipasang!", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_listitemphoto"))
@@ -1215,7 +1341,8 @@ async def cmd_listitemphoto(message: Message):
     from config import ITEMS
     photos = await get_all_item_photos()
     if not photos:
-        await message.answer("📋 Belum ada foto item yang dipasang.")
+        _sent = await message.answer("📋 Belum ada foto item yang dipasang.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     lines = ["📋 *Daftar Item Berphoto:*\n"]
     for p in photos:
@@ -1224,7 +1351,8 @@ async def cmd_listitemphoto(message: Message):
             f"• {item.get('emoji','')} *{item.get('name', p['item_id'])}*\n"
             f"  ID: `{p['item_id']}`"
         )
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(lines), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_delitemphoto"))
@@ -1233,14 +1361,17 @@ async def cmd_delitemphoto(message: Message):
         return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("❌ Format: `/admin_delitemphoto <item_id>`", parse_mode="Markdown")
+        _sent = await message.answer("❌ Format: `/admin_delitemphoto <item_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     item_id = args[1].strip()
     ok = await delete_item_photo(item_id)
     if ok:
-        await message.answer(f"✅ Foto item `{item_id}` berhasil dihapus!", parse_mode="Markdown")
+        _sent = await message.answer(f"✅ Foto item `{item_id}` berhasil dihapus!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(f"❌ Foto item `{item_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ Foto item `{item_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1256,16 +1387,19 @@ async def cmd_setvipphoto(message: Message):
     elif message.reply_to_message and message.reply_to_message.animation:
         photo = message.reply_to_message.animation
         await set_vip_photo(photo.file_id, "VIP", message.from_user.id)
-        await message.answer("✅ *GIF halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+        _sent = await message.answer("✅ *GIF halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     elif message.photo:
         photo = message.photo[-1]
     else:
-        await message.answer("❌ Reply ke foto/GIF atau kirim foto dengan caption `/admin_setvipphoto`", parse_mode="Markdown")
+        _sent = await message.answer("❌ Reply ke foto/GIF atau kirim foto dengan caption `/admin_setvipphoto`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     caption = (message.caption or message.text or "").replace("/admin_setvipphoto", "").strip()
     await set_vip_photo(photo.file_id, caption, message.from_user.id)
-    await message.answer("✅ *Foto halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+    _sent = await message.answer("✅ *Foto halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.photo & F.caption.startswith("/admin_setvipphoto"))
@@ -1275,7 +1409,8 @@ async def cmd_setvipphoto_direct(message: Message):
     photo = message.photo[-1]
     caption = (message.caption or "").replace("/admin_setvipphoto", "").strip()
     await set_vip_photo(photo.file_id, caption, message.from_user.id)
-    await message.answer("✅ *Foto halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+    _sent = await message.answer("✅ *Foto halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_delvipphoto"))
@@ -1283,7 +1418,8 @@ async def cmd_delvipphoto(message: Message):
     if not await is_admin(message.from_user.id):
         return
     ok = await delete_vip_photo()
-    await message.answer("✅ Foto VIP dihapus." if ok else "❌ Tidak ada foto VIP.", parse_mode="Markdown")
+    _sent = await message.answer("✅ Foto VIP dihapus." if ok else "❌ Tidak ada foto VIP.", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1299,16 +1435,19 @@ async def cmd_settopupphoto(message: Message):
     elif message.reply_to_message and message.reply_to_message.animation:
         photo = message.reply_to_message.animation
         await set_topup_photo(photo.file_id, "TopUp", message.from_user.id)
-        await message.answer("✅ *GIF halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+        _sent = await message.answer("✅ *GIF halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     elif message.photo:
         photo = message.photo[-1]
     else:
-        await message.answer("❌ Reply ke foto/GIF atau kirim foto dengan caption `/admin_settopupphoto`", parse_mode="Markdown")
+        _sent = await message.answer("❌ Reply ke foto/GIF atau kirim foto dengan caption `/admin_settopupphoto`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     caption = (message.caption or message.text or "").replace("/admin_settopupphoto", "").strip()
     await set_topup_photo(photo.file_id, caption, message.from_user.id)
-    await message.answer("✅ *Foto halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+    _sent = await message.answer("✅ *Foto halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.photo & F.caption.startswith("/admin_settopupphoto"))
@@ -1318,7 +1457,8 @@ async def cmd_settopupphoto_direct(message: Message):
     photo = message.photo[-1]
     caption = (message.caption or "").replace("/admin_settopupphoto", "").strip()
     await set_topup_photo(photo.file_id, caption, message.from_user.id)
-    await message.answer("✅ *Foto halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+    _sent = await message.answer("✅ *Foto halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_deltopupphoto"))
@@ -1326,7 +1466,8 @@ async def cmd_deltopupphoto(message: Message):
     if not await is_admin(message.from_user.id):
         return
     ok = await delete_topup_photo()
-    await message.answer("✅ Foto TopUp dihapus." if ok else "❌ Tidak ada foto TopUp.", parse_mode="Markdown")
+    _sent = await message.answer("✅ Foto TopUp dihapus." if ok else "❌ Tidak ada foto TopUp.", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1339,30 +1480,34 @@ async def cmd_givevip(message: Message):
         return
     args = message.text.split()[1:]
     if len(args) < 2:
-        await message.answer(
+        _sent = await message.answer(
             "❌ Format: `/admin_givevip [user_id] [plan_id]`\n"
             "Plan tersedia: `3_days`, `7_days`, `14_days`, `30_days`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         target_id = int(args[0])
         plan_id = args[1]
     except ValueError:
-        await message.answer("❌ `user_id` harus berupa angka!", parse_mode="Markdown")
+        _sent = await message.answer("❌ `user_id` harus berupa angka!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     from config import VIP_PRICES
     plan = VIP_PRICES.get(plan_id)
     if not plan:
         valid = ", ".join(f"`{k}`" for k in VIP_PRICES.keys())
-        await message.answer(
+        _sent = await message.answer(
             f"❌ Plan tidak valid!\nPilihan yang tersedia: {valid}",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     target = await get_user(target_id)
     if not target:
-        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     from datetime import datetime, timedelta
     # Jika sudah VIP aktif, perpanjang dari waktu sekarang
@@ -1378,12 +1523,13 @@ async def cmd_givevip(message: Message):
     new_exp = base_dt + timedelta(days=plan["days"])
     await update_user(target_id, vip_expires_at=new_exp.isoformat())
     target_name = target.get("display_name") or target.get("first_name", str(target_id))
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *VIP {plan['label']} diberikan!*\n\n"
         f"👤 User  : *{target_name}* (`{target_id}`)\n"
         f"📅 Expires: `{new_exp.strftime('%d/%m/%Y %H:%M')}`",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_revokevip"))
@@ -1392,25 +1538,29 @@ async def cmd_revokevip(message: Message):
         return
     args = message.text.split()[1:]
     if not args:
-        await message.answer(
+        _sent = await message.answer(
             "❌ Format: `/admin_revokevip [user_id]`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     try:
         target_id = int(args[0])
     except ValueError:
-        await message.answer("❌ `user_id` harus berupa angka!", parse_mode="Markdown")
+        _sent = await message.answer("❌ `user_id` harus berupa angka!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     target = await get_user(target_id)
     if not target:
-        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     target_name = target.get("display_name") or target.get("first_name", str(target_id))
     await update_user(target_id, vip_expires_at=None)
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *VIP dicabut!*\n\n"
         f"👤 User: *{target_name}* (`{target_id}`)\n"
         f"VIP user ini telah dinonaktifkan.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
