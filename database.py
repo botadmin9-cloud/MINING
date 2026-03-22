@@ -1,4 +1,5 @@
 import aiosqlite
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
@@ -7,6 +8,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 DB_PATH = "mining_bot.db"
+
+# Global lock untuk operasi write kritis agar tidak terjadi race condition
+# (terutama saat user klik multi-mine atau double-sell cepat)
+_db_write_lock = asyncio.Lock()
 
 
 async def init_db():
@@ -63,7 +68,33 @@ async def init_db():
             last_name_change TEXT DEFAULT NULL,
             is_mining_multi INTEGER DEFAULT 0,
             mining_multi_type TEXT DEFAULT NULL,
-            mining_multi_started TEXT DEFAULT NULL
+            mining_multi_started TEXT DEFAULT NULL,
+            is_banned       INTEGER DEFAULT 0,
+            ban_reason      TEXT    DEFAULT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS item_photos (
+            item_id     TEXT    PRIMARY KEY,
+            photo_id    TEXT    NOT NULL,
+            caption     TEXT    DEFAULT '',
+            set_by      INTEGER,
+            updated_at  TEXT    DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS vip_photos (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            photo_id    TEXT    NOT NULL,
+            caption     TEXT    DEFAULT '',
+            set_by      INTEGER,
+            updated_at  TEXT    DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS topup_photos (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            photo_id    TEXT    NOT NULL,
+            caption     TEXT    DEFAULT '',
+            set_by      INTEGER,
+            updated_at  TEXT    DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS mining_log (
@@ -204,6 +235,8 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN is_mining_multi INTEGER DEFAULT 0",
             "ALTER TABLE users ADD COLUMN mining_multi_type TEXT DEFAULT NULL",
             "ALTER TABLE users ADD COLUMN mining_multi_started TEXT DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN ban_reason TEXT DEFAULT NULL",
         ]
         for col_sql in migrations:
             try:
@@ -239,7 +272,7 @@ def _row_to_user(row) -> dict:
         "bag_kg_used","bag_kg_max","total_kg_mined","perm_xp_mult",
         "ore_kg_data","created_at","vip_expires_at","vip_type",
         "transfer_send_count","transfer_receive_count","transfer_week_start",
-        "last_name_change","is_mining_multi","mining_multi_type","mining_multi_started",
+        "last_name_change","is_mining_multi","mining_multi_type","mining_multi_started","is_banned","ban_reason",
     ]
     d = dict(zip(keys, row))
     d["owned_tools"]    = _loads(d.get("owned_tools"),   ["stone_pick"])
@@ -287,7 +320,7 @@ _ALLOWED_USER_COLUMNS = {
     "last_auto_mine","bag_kg_used","bag_kg_max","total_kg_mined","perm_xp_mult",
     "ore_kg_data","vip_expires_at","vip_type","transfer_send_count",
     "transfer_receive_count","transfer_week_start","last_name_change",
-    "is_mining_multi","mining_multi_type","mining_multi_started"
+    "is_mining_multi","mining_multi_type","mining_multi_started","is_banned","ban_reason"
 }
 
 
@@ -302,7 +335,12 @@ async def update_user(user_id: int, **kwargs):
             logger.warning(f"update_user: kolom tidak dikenal diabaikan: {k!r}")
             continue
         sets.append(f"{k}=?")
-        vals.append(json.dumps(v) if k in json_fields else v)
+        if v is None:
+            vals.append(None)
+        elif k in json_fields:
+            vals.append(json.dumps(v))
+        else:
+            vals.append(v)
     if not sets:
         return
     vals.append(user_id)
@@ -341,53 +379,58 @@ async def add_ore_to_inventory(user_id: int, ore_id: str, qty: int = 1, kg: floa
     
     increment_mine_count hanya True saat dipanggil dari proses mining (perform_mine),
     bukan dari market, admin gift, mystery box, dll.
+    Menggunakan _db_write_lock untuk mencegah race condition pada concurrent writes.
     """
-    user = await get_user(user_id)
-    if not user:
-        return
-    inv = user.get("ore_inventory", {})
-    inv[ore_id] = inv.get(ore_id, 0) + qty
-    kg_data = user.get("ore_kg_data", {})
-    kg_data[ore_id] = round(kg_data.get(ore_id, 0.0) + kg, 2)
-    raw_kg_used = user.get("bag_kg_used", 0.0) + kg
-    bag_kg_max  = user.get("bag_kg_max", 100.0)
-    # FIX Bug #5: cap bag_kg_used ke bag_kg_max, tapi ore_kg_data tetap
-    # menyimpan total KG asli agar kalkulasi sell price tetap akurat
-    bag_kg_used = round(min(raw_kg_used, bag_kg_max), 2)
-    updates = dict(ore_inventory=inv, ore_kg_data=kg_data, bag_kg_used=bag_kg_used)
-    if increment_mine_count:
-        updates["mine_count"]  = user.get("mine_count", 0) + 1
-        updates["total_mined"] = user.get("total_mined", 0) + 1
-    await update_user(user_id, **updates)
+    async with _db_write_lock:
+        user = await get_user(user_id)
+        if not user:
+            return
+        inv = user.get("ore_inventory", {})
+        inv[ore_id] = inv.get(ore_id, 0) + qty
+        kg_data = user.get("ore_kg_data", {})
+        kg_data[ore_id] = round(kg_data.get(ore_id, 0.0) + kg, 2)
+        raw_kg_used = user.get("bag_kg_used", 0.0) + kg
+        bag_kg_max  = user.get("bag_kg_max", 100.0)
+        # cap bag_kg_used ke bag_kg_max, tapi ore_kg_data tetap
+        # menyimpan total KG asli agar kalkulasi sell price tetap akurat
+        bag_kg_used = round(min(raw_kg_used, bag_kg_max), 2)
+        updates = dict(ore_inventory=inv, ore_kg_data=kg_data, bag_kg_used=bag_kg_used)
+        if increment_mine_count:
+            updates["mine_count"]  = user.get("mine_count", 0) + 1
+            updates["total_mined"] = user.get("total_mined", 0) + 1
+        await update_user(user_id, **updates)
 
 
 async def remove_ore_from_inventory(user_id: int, ore_id: str, qty: int) -> bool:
-    user = await get_user(user_id)
-    if not user:
-        return False
-    inv = user.get("ore_inventory", {})
-    if inv.get(ore_id, 0) < qty:
-        return False
-    inv[ore_id] -= qty
-    if inv[ore_id] <= 0:
-        del inv[ore_id]
-    kg_data = user.get("ore_kg_data", {})
-    remaining_qty = inv.get(ore_id, 0)  # qty setelah pengurangan (sudah dikurangi di atas)
-    if ore_id in kg_data and remaining_qty == 0:
-        removed_kg = kg_data.pop(ore_id, 0.0)
-    elif ore_id in kg_data:
-        old_qty = remaining_qty + qty  # qty SEBELUM pengurangan
-        if old_qty > 0:
-            per_kg = kg_data[ore_id] / old_qty
-            kg_data[ore_id] = round(per_kg * remaining_qty, 4)
-            removed_kg = per_kg * qty
+    """Kurangi ore dari inventory secara atomic menggunakan _db_write_lock
+    untuk mencegah double-sell saat user klik cepat atau concurrent requests."""
+    async with _db_write_lock:
+        user = await get_user(user_id)
+        if not user:
+            return False
+        inv = user.get("ore_inventory", {})
+        if inv.get(ore_id, 0) < qty:
+            return False
+        inv[ore_id] -= qty
+        if inv[ore_id] <= 0:
+            del inv[ore_id]
+        kg_data = user.get("ore_kg_data", {})
+        remaining_qty = inv.get(ore_id, 0)  # qty setelah pengurangan (sudah dikurangi di atas)
+        if ore_id in kg_data and remaining_qty == 0:
+            removed_kg = kg_data.pop(ore_id, 0.0)
+        elif ore_id in kg_data:
+            old_qty = remaining_qty + qty  # qty SEBELUM pengurangan
+            if old_qty > 0:
+                per_kg = kg_data[ore_id] / old_qty
+                kg_data[ore_id] = round(per_kg * remaining_qty, 4)
+                removed_kg = per_kg * qty
+            else:
+                removed_kg = 0.0
         else:
             removed_kg = 0.0
-    else:
-        removed_kg = 0.0
-    bag_kg_used = max(0.0, user.get("bag_kg_used", 0.0) - removed_kg)
-    await update_user(user_id, ore_inventory=inv, ore_kg_data=kg_data, bag_kg_used=bag_kg_used)
-    return True
+        bag_kg_used = max(0.0, user.get("bag_kg_used", 0.0) - removed_kg)
+        await update_user(user_id, ore_inventory=inv, ore_kg_data=kg_data, bag_kg_used=bag_kg_used)
+        return True
 
 
 async def log_mine(user_id: int, tool_id: str, tool_name: str, zone: str,
@@ -409,17 +452,29 @@ async def create_market_listing(seller_id: int, seller_username: str, seller_nam
                                  quantity: int, price_each: int,
                                  total_kg: float = 0.0) -> Optional[int]:
     # FIX #5: simpan total_kg aktual agar cancel bisa kembalikan berat yang tepat
+    # Listing dibuat dengan status='pending' agar tidak muncul di market sebelum ore dikurangi
     price_total = price_each * quantity
     async with aiosqlite.connect(DB_PATH, timeout=30) as db:
         cur = await db.execute(
             """INSERT INTO market_listings
-               (seller_id,seller_username,seller_name,ore_type,ore_name,ore_emoji,quantity,price_each,price_total,total_kg)
-               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+               (seller_id,seller_username,seller_name,ore_type,ore_name,ore_emoji,quantity,price_each,price_total,total_kg,status)
+               VALUES(?,?,?,?,?,?,?,?,?,?,'pending')""",
             (seller_id, seller_username, seller_name, ore_type, ore_name,
              ore_emoji, quantity, price_each, price_total, total_kg)
         )
         await db.commit()
         return cur.lastrowid
+
+
+async def activate_market_listing(listing_id: int) -> bool:
+    """Aktifkan listing dari status 'pending' ke 'active' setelah ore berhasil dikurangi."""
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        await db.execute(
+            "UPDATE market_listings SET status='active' WHERE id=? AND status='pending'",
+            (listing_id,)
+        )
+        await db.commit()
+    return True
 
 
 async def get_market_listings(ore_type: str = None, limit: int = 20) -> list:
@@ -468,7 +523,8 @@ async def buy_market_listing(listing_id: int, buyer_id: int, buyer_username: str
     if total_in_bag_check + listing["quantity"] > bag_slots_check:
         return False, f"❌ Bag pembeli penuh! ({total_in_bag_check}/{bag_slots_check} slot). Kosongkan bag dulu.", None
 
-    seller_earn = int(listing["price_total"] * 0.95)
+    from config import MARKET_FEE_PERCENT
+    seller_earn = int(listing["price_total"] * (1 - MARKET_FEE_PERCENT / 100))
     now_iso = datetime.now().isoformat()
 
     # FIX: Atomic transaction — update status + kurangi saldo buyer dalam satu DB transaction
@@ -829,8 +885,10 @@ async def increment_transfer_send(user_id: int):
         except Exception:
             reset = True
     if reset:
+        # FIX: Reset KEDUA counter saat minggu baru — jangan hanya send_count
         await update_user(user_id,
             transfer_send_count=1,
+            transfer_receive_count=0,
             transfer_week_start=now.isoformat()
         )
     else:
@@ -842,7 +900,6 @@ async def increment_transfer_receive(user_id: int):
     user = await get_user(user_id)
     if not user:
         return
-    # FIX: cek reset mingguan seperti increment_transfer_send
     week_start = user.get("transfer_week_start")
     now = datetime.now()
     reset = False
@@ -856,8 +913,10 @@ async def increment_transfer_receive(user_id: int):
         except Exception:
             reset = True
     if reset:
+        # FIX: Reset KEDUA counter saat minggu baru — jangan hanya receive_count
         await update_user(user_id,
             transfer_receive_count=1,
+            transfer_send_count=0,
             transfer_week_start=now.isoformat()
         )
     else:
@@ -1009,7 +1068,8 @@ async def reset_all_users() -> int:
                 transfer_week_start   = NULL,
                 is_mining_multi       = 0,
                 mining_multi_type     = NULL,
-                mining_multi_started  = NULL
+                mining_multi_started  = NULL,
+                last_name_change      = NULL
         """, (int(STARTING_BALANCE),))
         # Juga bersihkan mining_log, transactions, market
         await db.execute("DELETE FROM mining_log")
@@ -1018,3 +1078,133 @@ async def reset_all_users() -> int:
         await db.execute("DELETE FROM market_daily_count")
         await db.commit()
         return cur.rowcount
+
+
+# ══════════════════════════════════════════════════════════════
+# BAN / UNBAN
+# ══════════════════════════════════════════════════════════════
+
+async def ban_user(user_id: int, reason: str = "") -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        await db.execute(
+            "UPDATE users SET is_banned=1, ban_reason=? WHERE user_id=?",
+            (reason, user_id)
+        )
+        await db.commit()
+    return True
+
+
+async def unban_user(user_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        cur = await db.execute(
+            "UPDATE users SET is_banned=0, ban_reason=NULL WHERE user_id=?",
+            (user_id,)
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def is_banned(user_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        async with db.execute(
+            "SELECT is_banned FROM users WHERE user_id=?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return bool(row[0]) if row else False
+
+
+# ══════════════════════════════════════════════════════════════
+# ITEM PHOTOS
+# ══════════════════════════════════════════════════════════════
+
+async def set_item_photo(item_id: str, photo_id: str, caption: str, admin_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO item_photos(item_id,photo_id,caption,set_by,updated_at) VALUES(?,?,?,?,?)",
+            (item_id, photo_id, caption, admin_id, datetime.now().isoformat())
+        )
+        await db.commit()
+    return True
+
+
+async def get_item_photo(item_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM item_photos WHERE item_id=?", (item_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def get_all_item_photos() -> list:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM item_photos ORDER BY updated_at DESC") as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def delete_item_photo(item_id: str) -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        cur = await db.execute("DELETE FROM item_photos WHERE item_id=?", (item_id,))
+        await db.commit()
+        return cur.rowcount > 0
+
+
+# ══════════════════════════════════════════════════════════════
+# VIP PHOTOS (satu foto aktif untuk halaman VIP)
+# ══════════════════════════════════════════════════════════════
+
+async def set_vip_photo(photo_id: str, caption: str, admin_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        # Hapus foto lama dulu (hanya satu foto aktif)
+        await db.execute("DELETE FROM vip_photos")
+        await db.execute(
+            "INSERT INTO vip_photos(photo_id,caption,set_by,updated_at) VALUES(?,?,?,?)",
+            (photo_id, caption, admin_id, datetime.now().isoformat())
+        )
+        await db.commit()
+    return True
+
+
+async def get_vip_photo() -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM vip_photos ORDER BY updated_at DESC LIMIT 1") as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def delete_vip_photo() -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        cur = await db.execute("DELETE FROM vip_photos")
+        await db.commit()
+        return cur.rowcount > 0
+
+
+# ══════════════════════════════════════════════════════════════
+# TOPUP PHOTOS (satu foto aktif untuk halaman TopUp)
+# ══════════════════════════════════════════════════════════════
+
+async def set_topup_photo(photo_id: str, caption: str, admin_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        await db.execute("DELETE FROM topup_photos")
+        await db.execute(
+            "INSERT INTO topup_photos(photo_id,caption,set_by,updated_at) VALUES(?,?,?,?)",
+            (photo_id, caption, admin_id, datetime.now().isoformat())
+        )
+        await db.commit()
+    return True
+
+
+async def get_topup_photo() -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM topup_photos ORDER BY updated_at DESC LIMIT 1") as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def delete_topup_photo() -> bool:
+    async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+        cur = await db.execute("DELETE FROM topup_photos")
+        await db.commit()
+        return cur.rowcount > 0
