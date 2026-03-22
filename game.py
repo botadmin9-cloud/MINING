@@ -27,6 +27,7 @@ async def regen_energy(user: dict) -> dict:
     # Jika energy sudah penuh, selalu update timestamp agar timer tidak tertinggal
     if user["energy"] >= user["max_energy"]:
         await update_user(user["user_id"], last_energy_regen=now.isoformat())
+        user["last_energy_regen"] = now.isoformat()
         return user
     if last:
         try:
@@ -82,7 +83,7 @@ def get_mine_cooldown_seconds(user: dict, is_admin: bool = False) -> int:
     base_delay = tool.get("speed_delay", 6)
     buffs = get_active_buffs(user)
     speed_mult = get_buff_val(buffs, "speed_boost", 1.0)
-    if speed_mult > 0 and speed_mult != 1.0:  # FIX: terapkan buff kapanpun nilainya bukan 1.0 (bukan hanya < 1.0)
+    if speed_mult > 0 and speed_mult != 1.0:
         base_delay = max(1, int(base_delay * speed_mult))
     if is_vip_active(user):
         from config import VIP_COOLDOWN_REDUCTION
@@ -218,7 +219,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
 
     # Cek cooldown (jika bukan admin)
     if not is_admin:
-        can_mine, cd_msg = await check_mine_cooldown(user, is_admin=False)
+        can_mine, cd_msg = await check_mine_cooldown(user, is_admin=is_admin)
         if not can_mine:
             return {"ok": False, "msg": cd_msg}
 
@@ -261,7 +262,7 @@ async def perform_mine(user_id: int, is_admin: bool = False) -> dict:
     xp_mult  = get_buff_val(buffs, "xp_mult", 1.0) or 1.0
     perm_xp_mult = user.get("perm_xp_mult", 1.0) or 1.0  # permanent XP dari rebirth
     tool_xp_bonus = tool.get("xp_bonus", 1.0)
-    zone_xp_bonus = zone.get("kg_bonus", 1.0)  # zona lebih dalam = kg_bonus lebih tinggi = XP lebih banyak
+    zone_xp_bonus = zone.get("kg_bonus", 1.0)  # zona lebih dalam = kg_bonus lebih tinggi = XP lebih banyak (zona tidak punya xp_bonus terpisah)
 
     # XP dasar dari ore, dikalikan semua bonus
     base_xp = ore["xp"]
@@ -760,9 +761,11 @@ async def use_item(user_id: int, item_id: str) -> Tuple[bool, str]:
             "level": 1, "xp": 0, "rebirth_count": rb_count,
             "perm_xp_mult": perm_xp,
             "owned_tools": ["stone_pick"], "current_tool": "stone_pick",
+            # BUG FIX: Reset mining multi status saat rebirth agar tidak stuck
+            "is_mining_multi": 0, "mining_multi_type": None, "mining_multi_started": None,
         })
         msg_lines.append(f"🔄 *REBIRTH #{rb_count}!* Level direset. Permanent XP: `{perm_xp:.1f}x`")
-        # FIX BUG 6: Grant rebirth_1 achievement (hanya 1x pertama kali)
+        # Grant rebirth_1 achievement (hanya 1x pertama kali)
         await update_user(user_id, **updates)
         updates = {}  # sudah di-apply, reset agar tidak double-update
         ach = await _grant_if_new(user_id, "rebirth_1")
