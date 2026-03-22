@@ -8,6 +8,7 @@ from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT, MARKET_DAILY_LIMIT, calc
 from database import (get_user, get_market_listings, get_listing_by_id,
                        buy_market_listing, cancel_market_listing,
                        get_user_market_listings, create_market_listing,
+                       activate_market_listing,
                        remove_ore_from_inventory, get_market_daily_count,
                        increment_market_daily_count)
 from keyboards import (market_main_kb, market_listing_kb, market_my_listings_kb,
@@ -418,14 +419,7 @@ async def process_sell_price(message: Message, state: FSMContext):
         _avg = (_ore.get("kg_min", 0.5) + _ore.get("kg_max", 2.0)) / 2
         listing_total_kg = round(_avg * qty, 4)
 
-    # Kurangi ore dari inventory
-    removed = await remove_ore_from_inventory(message.from_user.id, data["ore_id"], qty)
-    if not removed:
-        await message.answer("❌ Ore tidak cukup di inventory!")
-        await state.clear()
-        return
-
-    # Buat listing (sertakan total_kg aktual)
+    # Buat listing DULU sebelum kurangi ore — jika DB gagal, ore tidak hilang
     user = await get_user(uid)
     username = message.from_user.username or ""
     fname = message.from_user.first_name or "Miner"
@@ -441,6 +435,24 @@ async def process_sell_price(message: Message, state: FSMContext):
         price_each=price_each,
         total_kg=listing_total_kg
     )
+
+    if not listing_id:
+        await message.answer("❌ Gagal membuat listing. Coba lagi!")
+        await state.clear()
+        return
+
+    # Kurangi ore dari inventory hanya setelah listing berhasil dibuat
+    removed = await remove_ore_from_inventory(message.from_user.id, data["ore_id"], qty)
+    if not removed:
+        # Listing sudah terbuat tapi ore tidak bisa dikurangi — batalkan listing
+        from database import cancel_market_listing
+        await cancel_market_listing(listing_id, message.from_user.id)
+        await message.answer("❌ Ore tidak cukup di inventory!")
+        await state.clear()
+        return
+
+    # Aktifkan listing ke status 'active' sekarang ore sudah berhasil dikurangi
+    await activate_market_listing(listing_id)
 
     await state.clear()
 
