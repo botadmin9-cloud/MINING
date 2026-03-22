@@ -2,6 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from keyboards import main_menu_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -68,4 +69,5 @@ HELP_TEXT = (
 @router.message(F.text == "❓ Bantuan")
 @router.message(Command("help"))
 async def show_help(message: Message):
-    await message.answer(HELP_TEXT, parse_mode="HTML", reply_markup=main_menu_kb())
+    _sent = await message.answer(HELP_TEXT, parse_mode="HTML", reply_markup=main_menu_kb())
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
