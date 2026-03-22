@@ -23,9 +23,24 @@ class AutoRegisterMiddleware(BaseMiddleware):
                         tg_user.first_name or "Miner"
                     )
                 else:
-                    # FIX #3: update username/first_name jika berubah sejak terakhir kali
-                    # Juga sync display_name jika user belum pernah set nama sendiri
-                    # (display_name == first_name lama → update ikut first_name baru)
+                    # Cek apakah user di-ban
+                    if existing.get("is_banned"):
+                        reason = existing.get("ban_reason") or "Tidak ada alasan"
+                        ban_msg = (
+                            f"🚫 *Akun kamu telah dibanned!*\n\n"
+                            f"📋 Alasan: _{reason}_\n\n"
+                            f"Hubungi admin jika ini adalah kesalahan."
+                        )
+                        try:
+                            if isinstance(event, Message):
+                                await event.answer(ban_msg, parse_mode="Markdown")
+                            elif isinstance(event, CallbackQuery):
+                                await event.answer("🚫 Akun kamu dibanned!", show_alert=True)
+                        except Exception:
+                            pass
+                        return  # Blokir handler
+
+                    # Update username/first_name jika berubah
                     new_username = tg_user.username or ""
                     new_fname = tg_user.first_name or "Miner"
                     needs_update = {}
@@ -33,8 +48,6 @@ class AutoRegisterMiddleware(BaseMiddleware):
                         needs_update["username"] = new_username
                     if existing.get("first_name") != new_fname:
                         needs_update["first_name"] = new_fname
-                        # Jika display_name masih sama dengan first_name lama,
-                        # berarti user belum pernah custom setname → ikut update
                         old_fname = existing.get("first_name", "")
                         old_display = existing.get("display_name", "")
                         if not old_display or old_display == old_fname:
