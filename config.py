@@ -35,6 +35,7 @@ async def get_all_admin_ids() -> list[int]:
     except Exception:
         return list(STATIC_ADMIN_IDS)
 DATABASE_URL = os.getenv("DATABASE_URL", "mining_bot.db")
+DB_PATH = DATABASE_URL  # alias untuk kompatibilitas bot.py & database.py
 
 # FIX #9: Channel Telegram untuk notifikasi market
 MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env dgn integer ID, contoh: -1001234567890
