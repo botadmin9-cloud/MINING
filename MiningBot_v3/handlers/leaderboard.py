@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from config import ADMIN_IDS, format_kg
 from database import get_leaderboard_by, get_user_rank, get_user
 from keyboards import leaderboard_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -28,7 +29,8 @@ WEEKLY_REWARD = {
 @router.message(Command("leaderboard"))
 async def show_leaderboard(message: Message):
     text = await _build_lb(message.from_user.id, "balance", "weekly")
-    await message.answer(text, reply_markup=leaderboard_kb(), parse_mode="Markdown")
+    _sent = await message.answer(text, reply_markup=leaderboard_kb(), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "lb_refresh")
