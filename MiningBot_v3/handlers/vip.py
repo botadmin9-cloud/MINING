@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from config import ADMIN_IDS, VIP_PRICES, VIP_TRANSFER_INFO, TOPUP_TRANSFER_INFO
-from database import get_user, update_user, add_balance, is_dynamic_admin
+from database import get_user, update_user, add_balance, is_dynamic_admin, get_vip_photo, get_topup_photo
 from keyboards import (vip_shop_kb, vip_proof_kb, topup_shop_kb,
                         topup_proof_kb, shop_main_kb, back_main_kb)
 
@@ -67,10 +67,25 @@ async def cb_shop_vip(callback: CallbackQuery):
         "lalu kirim bukti transfer ke bot.\n"
         "Admin akan mengaktifkan VIP dalam 1x24 jam."
     )
+    kb = vip_shop_kb(has_vip=bool(user.get("vip_expires_at")))
+    # FIX 9: Tampilkan foto VIP jika ada
+    vip_photo = await get_vip_photo()
     try:
-        await callback.message.edit_text(text, reply_markup=vip_shop_kb(has_vip=bool(user.get("vip_expires_at"))), parse_mode="Markdown")
+        if vip_photo:
+            await callback.message.answer_photo(
+                photo=vip_photo["photo_id"],
+                caption=text,
+                reply_markup=kb,
+                parse_mode="Markdown"
+            )
+            await callback.message.delete()
+        else:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     except Exception:
-        pass
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass
     await callback.answer()
 
 
@@ -156,10 +171,25 @@ async def cb_shop_topup(callback: CallbackQuery):
         "• Rp 500.000 → 2 Milyar Koin 💎\n\n"
         "Pilih paket, transfer, lalu kirim bukti!"
     )
+    kb = topup_shop_kb()
+    # FIX 9: Tampilkan foto TopUp jika ada
+    topup_photo = await get_topup_photo()
     try:
-        await callback.message.edit_text(text, reply_markup=topup_shop_kb(), parse_mode="Markdown")
+        if topup_photo:
+            await callback.message.answer_photo(
+                photo=topup_photo["photo_id"],
+                caption=text,
+                reply_markup=kb,
+                parse_mode="Markdown"
+            )
+            await callback.message.delete()
+        else:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     except Exception:
-        pass
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass
     await callback.answer()
 
 
