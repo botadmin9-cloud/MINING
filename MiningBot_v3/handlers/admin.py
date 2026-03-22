@@ -10,9 +10,13 @@ from database import (get_user, update_user, get_all_users, get_total_users,
                        get_all_ore_photos, delete_ore_photo,
                        set_tool_photo, get_tool_photo, get_all_tool_photos, delete_tool_photo,
                        set_zone_photo, get_zone_photo, get_all_zone_photos, delete_zone_photo,
+                       set_item_photo, get_item_photo, get_all_item_photos, delete_item_photo,
+                       set_vip_photo, get_vip_photo, delete_vip_photo,
+                       set_topup_photo, get_topup_photo, delete_topup_photo,
                        add_ore_to_inventory,
                        add_dynamic_admin, remove_dynamic_admin, get_dynamic_admins,
-                       is_dynamic_admin, reset_all_users)
+                       is_dynamic_admin, reset_all_users,
+                       ban_user, unban_user)
 from keyboards import admin_kb, back_main_kb
 
 router = Router()
@@ -56,6 +60,8 @@ async def cmd_adminhelp(message: Message):
         "/admin_givezone [user_id] [zone_id] — Buka zona",
         "/admin_reset [user_id] — Reset data 1 user",
         "/admin_resetall KONFIRMASI — ⚠️ Reset SEMUA data pemain",
+        "/admin_ban [user_id] [alasan] — 🚫 Ban user",
+        "/admin_unban [user_id] — ✅ Unban user",
         "",
         "<b>🛡️ Manajemen Admin:</b>",
         "/admin_listadmin — Lihat semua admin",
@@ -68,19 +74,26 @@ async def cmd_adminhelp(message: Message):
         "/admin_revokevip [user_id] — Cabut VIP",
         "<i>Plan ID: 3_days, 7_days, 14_days, 30_days</i>",
         "",
-        "<b>📸 Foto Admin, Ore, Alat & Zona:</b>",
+        "<b>📸 Foto Admin, Ore, Alat, Zona, Item, VIP & TopUp:</b>",
         "/admin_setphoto — Upload foto profil admin",
         "/admin_myphotos — Lihat foto profil admin",
         "/admin_deletephoto [id] — Hapus foto profil",
-        "/admin_setorephoto [ore_id] — Pasang foto ORE",
+        "/admin_setorephoto [ore_id] — Pasang foto/GIF ORE",
         "/admin_listorephoto — Lihat semua ore berphoto",
         "/admin_delorephoto [ore_id] — Hapus foto ore",
-        "/admin_settoolphoto [tool_id] — Pasang foto ALAT MINING",
+        "/admin_settoolphoto [tool_id] — Pasang foto/GIF ALAT MINING",
         "/admin_listtoolphoto — Lihat semua alat berphoto",
         "/admin_deltoolphoto [tool_id] — Hapus foto alat",
-        "/admin_setzonephoto [zone_id] — Pasang foto ZONA",
+        "/admin_setzonephoto [zone_id] — Pasang foto/GIF ZONA",
         "/admin_listzonephoto — Lihat semua zona berphoto",
         "/admin_delzonephoto [zone_id] — Hapus foto zona",
+        "/admin_setitemphoto [item_id] — Pasang foto/GIF ITEM",
+        "/admin_listitemphoto — Lihat semua item berphoto",
+        "/admin_delitemphoto [item_id] — Hapus foto item",
+        "/admin_setvipphoto — Pasang foto/GIF halaman VIP",
+        "/admin_delvipphoto — Hapus foto VIP",
+        "/admin_settopupphoto — Pasang foto/GIF halaman TopUp",
+        "/admin_deltopupphoto — Hapus foto TopUp",
         "",
         "<b>📊 Statistik & Broadcast:</b>",
         "/admin_stats — Statistik bot keseluruhan",
@@ -600,16 +613,21 @@ async def cmd_setorephoto(message: Message):
     parts = message.text.split()
     ore_id_arg = parts[1] if len(parts) > 1 else None
     photo = None
-    if message.reply_to_message and message.reply_to_message.photo:
-        photo = message.reply_to_message.photo[-1]
+    is_animation = False
+    if message.reply_to_message:
+        if message.reply_to_message.photo:
+            photo = message.reply_to_message.photo[-1]
+        elif message.reply_to_message.animation:
+            photo = message.reply_to_message.animation
+            is_animation = True
     elif message.photo:
         photo = message.photo[-1]
 
     if not ore_id_arg:
-        await message.answer("Cara: reply foto dengan `/admin_setorephoto <ore_id>`", parse_mode="Markdown")
+        await message.answer("Cara: reply foto/GIF dengan `/admin_setorephoto <ore_id>`", parse_mode="Markdown")
         return
     if not photo:
-        await message.answer("❌ Tidak ada foto! Reply foto dengan perintah ini.", parse_mode="Markdown")
+        await message.answer("❌ Tidak ada foto/GIF! Reply foto atau GIF dengan perintah ini.", parse_mode="Markdown")
         return
 
     ore = ORES.get(ore_id_arg)
@@ -619,7 +637,8 @@ async def cmd_setorephoto(message: Message):
 
     caption = " ".join(parts[2:]) if len(parts) > 2 else ""
     await set_ore_photo(ore_id_arg, photo.file_id, caption, message.from_user.id)
-    await message.answer(f"✅ Foto {ore['emoji']} *{ore['name']}* dipasang!", parse_mode="Markdown")
+    kind = "GIF" if is_animation else "Foto"
+    await message.answer(f"✅ {kind} {ore['emoji']} *{ore['name']}* dipasang!", parse_mode="Markdown")
 
 
 @router.message(F.photo & F.caption.regexp(r"^/admin_setorephoto"))
@@ -742,22 +761,29 @@ async def cmd_settoolphoto(message: Message):
         return
 
     photo = None
+    is_animation = False
     caption = ""
-    if message.reply_to_message and message.reply_to_message.photo:
-        photo = message.reply_to_message.photo[-1]
-        caption = " ".join(args[2:]) if len(args) > 2 else ""
+    if message.reply_to_message:
+        if message.reply_to_message.photo:
+            photo = message.reply_to_message.photo[-1]
+            caption = " ".join(args[2:]) if len(args) > 2 else ""
+        elif message.reply_to_message.animation:
+            photo = message.reply_to_message.animation
+            is_animation = True
+            caption = " ".join(args[2:]) if len(args) > 2 else ""
     elif message.photo:
         photo = message.photo[-1]
         caption = message.caption or ""
 
     if not photo:
-        await message.answer("❌ Kirim/reply foto bersamaan dengan perintah!")
+        await message.answer("❌ Kirim/reply foto atau GIF bersamaan dengan perintah!")
         return
 
     tool = TOOLS[tool_id]
     await set_tool_photo(tool_id, photo.file_id, caption, message.from_user.id)
+    kind = "GIF" if is_animation else "Foto"
     await message.answer(
-        f"✅ *Foto alat berhasil dipasang!*\n\n"
+        f"✅ *{kind} alat berhasil dipasang!*\n\n"
         f"🔧 Alat: *{tool['name']}*\n"
         f"🆔 ID: `{tool_id}`",
         parse_mode="Markdown"
@@ -823,22 +849,29 @@ async def cmd_setzonephoto(message: Message):
         return
 
     photo = None
+    is_animation = False
     caption = ""
-    if message.reply_to_message and message.reply_to_message.photo:
-        photo = message.reply_to_message.photo[-1]
-        caption = " ".join(args[2:]) if len(args) > 2 else ""
+    if message.reply_to_message:
+        if message.reply_to_message.photo:
+            photo = message.reply_to_message.photo[-1]
+            caption = " ".join(args[2:]) if len(args) > 2 else ""
+        elif message.reply_to_message.animation:
+            photo = message.reply_to_message.animation
+            is_animation = True
+            caption = " ".join(args[2:]) if len(args) > 2 else ""
     elif message.photo:
         photo = message.photo[-1]
         caption = message.caption or ""
 
     if not photo:
-        await message.answer("❌ Kirim/reply foto bersamaan dengan perintah!")
+        await message.answer("❌ Kirim/reply foto atau GIF bersamaan dengan perintah!")
         return
 
     zone = ZONES[zone_id]
     await set_zone_photo(zone_id, photo.file_id, caption, message.from_user.id)
+    kind = "GIF" if is_animation else "Foto"
     await message.answer(
-        f"✅ *Foto zona berhasil dipasang!*\n\n"
+        f"✅ *{kind} zona berhasil dipasang!*\n\n"
         f"📍 Zona: *{zone['name']}*\n"
         f"🆔 ID: `{zone_id}`",
         parse_mode="Markdown"
@@ -1037,5 +1070,347 @@ async def cmd_resetall(message: Message):
         f"👥 Total pemain direset: `{count}`\n"
         f"🗑️ Mining log, transaksi & market listing dihapus.\n"
         f"⚙️ Semua pemain kembali ke awal.",
+        parse_mode="Markdown"
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# BAN / UNBAN USER
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_ban"))
+async def cmd_ban_user(message: Message):
+    """Ban user: /admin_ban <user_id> [alasan]"""
+    if not await is_admin(message.from_user.id):
+        return
+    parts = message.text.split(None, 2)
+    if len(parts) < 2:
+        await message.answer(
+            "ℹ️ *Format:* `/admin_ban <user_id> [alasan]`\n\n"
+            "Contoh:\n`/admin_ban 123456789 Cheating`",
+            parse_mode="Markdown"
+        )
+        return
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ user_id harus angka!")
+        return
+    if target_id in STATIC_ADMIN_IDS:
+        await message.answer("❌ Tidak bisa ban super-admin!")
+        return
+    reason = parts[2] if len(parts) > 2 else "Tidak ada alasan"
+    user_info = await get_user(target_id)
+    if not user_info:
+        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+    await ban_user(target_id, reason)
+    name = user_info.get("display_name") or user_info.get("first_name", "-")
+    await message.answer(
+        f"🚫 *User berhasil dibanned!*\n\n"
+        f"👤 Nama: *{name}*\n"
+        f"🆔 ID: `{target_id}`\n"
+        f"📋 Alasan: _{reason}_",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("admin_unban"))
+async def cmd_unban_user(message: Message):
+    """Unban user: /admin_unban <user_id>"""
+    if not await is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer(
+            "ℹ️ *Format:* `/admin_unban <user_id>`",
+            parse_mode="Markdown"
+        )
+        return
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ user_id harus angka!")
+        return
+    user_info = await get_user(target_id)
+    if not user_info:
+        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+    ok = await unban_user(target_id)
+    name = user_info.get("display_name") or user_info.get("first_name", "-")
+    if ok:
+        await message.answer(
+            f"✅ *User berhasil di-unban!*\n\n"
+            f"👤 Nama: *{name}*\n"
+            f"🆔 ID: `{target_id}`",
+            parse_mode="Markdown"
+        )
+    else:
+        await message.answer(f"⚠️ User `{target_id}` tidak dalam status banned.", parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# FOTO ITEM
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_setitemphoto"))
+async def cmd_setitemphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "📸 *Format:* Reply foto dengan `/admin_setitemphoto <item_id>`\n\n"
+            "Gunakan /admin_items untuk lihat daftar item_id.",
+            parse_mode="Markdown"
+        )
+        return
+    item_id = args[1].strip()
+    from config import ITEMS
+    if item_id not in ITEMS:
+        await message.answer(f"❌ item_id `{item_id}` tidak ditemukan!\nGunakan /admin_items.", parse_mode="Markdown")
+        return
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+    elif message.reply_to_message and message.reply_to_message.animation:
+        photo = message.reply_to_message.animation
+        await set_item_photo(item_id, photo.file_id, "", message.from_user.id)
+        item = ITEMS.get(item_id, {})
+        await message.answer(f"✅ GIF item *{item.get('name', item_id)}* berhasil dipasang!", parse_mode="Markdown")
+        return
+    else:
+        await message.answer("❌ Reply ke foto/GIF item dulu!", parse_mode="Markdown")
+        return
+    caption = " ".join(args[2:]) if len(args) > 2 else ""
+    await set_item_photo(item_id, photo.file_id, caption, message.from_user.id)
+    item = ITEMS.get(item_id, {})
+    await message.answer(
+        f"✅ Foto item *{item.get('name', item_id)}* berhasil dipasang!\n"
+        f"🆔 item_id: `{item_id}`",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(F.photo & F.caption.regexp(r"^/admin_setitemphoto\s+\S+"))
+async def cmd_setitemphoto_direct(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    args = (message.caption or "").split()
+    item_id = args[1].strip() if len(args) > 1 else ""
+    from config import ITEMS
+    if item_id not in ITEMS:
+        await message.answer(f"❌ item_id `{item_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+    photo = message.photo[-1]
+    caption = " ".join(args[2:]) if len(args) > 2 else ""
+    await set_item_photo(item_id, photo.file_id, caption, message.from_user.id)
+    item = ITEMS.get(item_id, {})
+    await message.answer(f"✅ Foto item *{item.get('name', item_id)}* berhasil dipasang!", parse_mode="Markdown")
+
+
+@router.message(Command("admin_listitemphoto"))
+async def cmd_listitemphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    from config import ITEMS
+    photos = await get_all_item_photos()
+    if not photos:
+        await message.answer("📋 Belum ada foto item yang dipasang.")
+        return
+    lines = ["📋 *Daftar Item Berphoto:*\n"]
+    for p in photos:
+        item = ITEMS.get(p["item_id"], {})
+        lines.append(
+            f"• {item.get('emoji','')} *{item.get('name', p['item_id'])}*\n"
+            f"  ID: `{p['item_id']}`"
+        )
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(Command("admin_delitemphoto"))
+async def cmd_delitemphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Format: `/admin_delitemphoto <item_id>`", parse_mode="Markdown")
+        return
+    item_id = args[1].strip()
+    ok = await delete_item_photo(item_id)
+    if ok:
+        await message.answer(f"✅ Foto item `{item_id}` berhasil dihapus!", parse_mode="Markdown")
+    else:
+        await message.answer(f"❌ Foto item `{item_id}` tidak ditemukan!", parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# FOTO VIP
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_setvipphoto"))
+async def cmd_setvipphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+    elif message.reply_to_message and message.reply_to_message.animation:
+        photo = message.reply_to_message.animation
+        await set_vip_photo(photo.file_id, "VIP", message.from_user.id)
+        await message.answer("✅ *GIF halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+        return
+    elif message.photo:
+        photo = message.photo[-1]
+    else:
+        await message.answer("❌ Reply ke foto/GIF atau kirim foto dengan caption `/admin_setvipphoto`", parse_mode="Markdown")
+        return
+    caption = (message.caption or message.text or "").replace("/admin_setvipphoto", "").strip()
+    await set_vip_photo(photo.file_id, caption, message.from_user.id)
+    await message.answer("✅ *Foto halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+
+
+@router.message(F.photo & F.caption.startswith("/admin_setvipphoto"))
+async def cmd_setvipphoto_direct(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    photo = message.photo[-1]
+    caption = (message.caption or "").replace("/admin_setvipphoto", "").strip()
+    await set_vip_photo(photo.file_id, caption, message.from_user.id)
+    await message.answer("✅ *Foto halaman VIP berhasil dipasang!*", parse_mode="Markdown")
+
+
+@router.message(Command("admin_delvipphoto"))
+async def cmd_delvipphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    ok = await delete_vip_photo()
+    await message.answer("✅ Foto VIP dihapus." if ok else "❌ Tidak ada foto VIP.", parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# FOTO TOPUP
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_settopupphoto"))
+async def cmd_settopupphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+    elif message.reply_to_message and message.reply_to_message.animation:
+        photo = message.reply_to_message.animation
+        await set_topup_photo(photo.file_id, "TopUp", message.from_user.id)
+        await message.answer("✅ *GIF halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+        return
+    elif message.photo:
+        photo = message.photo[-1]
+    else:
+        await message.answer("❌ Reply ke foto/GIF atau kirim foto dengan caption `/admin_settopupphoto`", parse_mode="Markdown")
+        return
+    caption = (message.caption or message.text or "").replace("/admin_settopupphoto", "").strip()
+    await set_topup_photo(photo.file_id, caption, message.from_user.id)
+    await message.answer("✅ *Foto halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+
+
+@router.message(F.photo & F.caption.startswith("/admin_settopupphoto"))
+async def cmd_settopupphoto_direct(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    photo = message.photo[-1]
+    caption = (message.caption or "").replace("/admin_settopupphoto", "").strip()
+    await set_topup_photo(photo.file_id, caption, message.from_user.id)
+    await message.answer("✅ *Foto halaman TopUp berhasil dipasang!*", parse_mode="Markdown")
+
+
+@router.message(Command("admin_deltopupphoto"))
+async def cmd_deltopupphoto(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    ok = await delete_topup_photo()
+    await message.answer("✅ Foto TopUp dihapus." if ok else "❌ Tidak ada foto TopUp.", parse_mode="Markdown")
+
+
+# ══════════════════════════════════════════════════════════════
+# GIVE VIP / REVOKE VIP
+# ══════════════════════════════════════════════════════════════
+
+@router.message(Command("admin_givevip"))
+async def cmd_givevip(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    args = message.text.split()[1:]
+    if len(args) < 2:
+        await message.answer(
+            "❌ Format: `/admin_givevip [user_id] [plan_id]`\n"
+            "Plan tersedia: `3_days`, `7_days`, `14_days`, `30_days`",
+            parse_mode="Markdown"
+        )
+        return
+    try:
+        target_id = int(args[0])
+        plan_id = args[1]
+    except ValueError:
+        await message.answer("❌ `user_id` harus berupa angka!", parse_mode="Markdown")
+        return
+    from config import VIP_PRICES
+    plan = VIP_PRICES.get(plan_id)
+    if not plan:
+        valid = ", ".join(f"`{k}`" for k in VIP_PRICES.keys())
+        await message.answer(
+            f"❌ Plan tidak valid!\nPilihan yang tersedia: {valid}",
+            parse_mode="Markdown"
+        )
+        return
+    target = await get_user(target_id)
+    if not target:
+        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+    from datetime import datetime, timedelta
+    # Jika sudah VIP aktif, perpanjang dari waktu sekarang
+    existing_exp = target.get("vip_expires_at")
+    base_dt = datetime.now()
+    if existing_exp:
+        try:
+            exp_dt = datetime.fromisoformat(existing_exp)
+            if exp_dt > base_dt:
+                base_dt = exp_dt  # perpanjang dari expiry yang ada
+        except Exception:
+            pass
+    new_exp = base_dt + timedelta(days=plan["days"])
+    await update_user(target_id, vip_expires_at=new_exp.isoformat())
+    target_name = target.get("display_name") or target.get("first_name", str(target_id))
+    await message.answer(
+        f"✅ *VIP {plan['label']} diberikan!*\n\n"
+        f"👤 User  : *{target_name}* (`{target_id}`)\n"
+        f"📅 Expires: `{new_exp.strftime('%d/%m/%Y %H:%M')}`",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("admin_revokevip"))
+async def cmd_revokevip(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+    args = message.text.split()[1:]
+    if not args:
+        await message.answer(
+            "❌ Format: `/admin_revokevip [user_id]`",
+            parse_mode="Markdown"
+        )
+        return
+    try:
+        target_id = int(args[0])
+    except ValueError:
+        await message.answer("❌ `user_id` harus berupa angka!", parse_mode="Markdown")
+        return
+    target = await get_user(target_id)
+    if not target:
+        await message.answer(f"❌ User `{target_id}` tidak ditemukan!", parse_mode="Markdown")
+        return
+    target_name = target.get("display_name") or target.get("first_name", str(target_id))
+    await update_user(target_id, vip_expires_at=None)
+    await message.answer(
+        f"✅ *VIP dicabut!*\n\n"
+        f"👤 User: *{target_name}* (`{target_id}`)\n"
+        f"VIP user ini telah dinonaktifkan.",
         parse_mode="Markdown"
     )
