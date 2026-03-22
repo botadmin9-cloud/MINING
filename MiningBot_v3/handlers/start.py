@@ -8,6 +8,7 @@ from config import TOOLS, ZONES, ADMIN_IDS
 from database import get_user, create_user, update_user, is_dynamic_admin
 from game import regen_energy, energy_full_in, get_active_buffs
 from keyboards import main_menu_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -69,7 +70,7 @@ async def cmd_start(message: Message, state: FSMContext):
     if not existing or is_brand_new:
         await state.set_state(RegisterState.waiting_username)
         await state.update_data(uid=uid, uname=uname, fname=fname)
-        await message.answer(
+        _sent = await message.answer(
             f"⛏️ *Selamat Datang di Mining Bot!*\n\n"
             f"Halo, {fname}! 👋\n\n"
             f"Sebelum mulai, masukkan *nama/username* yang ingin kamu gunakan di game ini:\n"
@@ -78,6 +79,7 @@ async def cmd_start(message: Message, state: FSMContext):
             f"Atau ketik /skip untuk pakai nama default (`{fname}`).",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
         # Update username & first_name jika berubah
         needs_update = {}
@@ -111,23 +113,26 @@ async def cmd_start(message: Message, state: FSMContext):
             f"📍 Zona    : {zone['name']}"
             f"{buff_txt}"
         )
-        await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
+        _sent = await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
         # Tampilkan tombol link official
         from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
         if OFFICIAL_CHANNEL or OFFICIAL_GROUP:
-            await message.answer(
+            _sent = await message.answer(
                 "📢 *Bergabung ke komunitas official kami!*",
                 reply_markup=_official_links_kb(),
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("skip"))
 async def cmd_skip_username(message: Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state != RegisterState.waiting_username:
-        await message.answer("❌ Tidak ada proses registrasi aktif.", parse_mode="Markdown")
+        _sent = await message.answer("❌ Tidak ada proses registrasi aktif.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     data = await state.get_data()
     await state.clear()
@@ -141,10 +146,11 @@ async def cmd_skip_username(message: Message, state: FSMContext):
 async def process_username(message: Message, state: FSMContext):
     display_name = message.text.strip()
     if len(display_name) < 2 or len(display_name) > 30:
-        await message.answer(
+        _sent = await message.answer(
             "❌ Nama harus 2–30 karakter. Coba lagi:",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     data = await state.get_data()
     await state.clear()
@@ -177,53 +183,59 @@ async def _finish_register(message: Message, uid: int, uname: str,
         f"🚀 Gunakan menu di bawah untuk memulai!"
         f"{admin_note}"
     )
-    await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
+    _sent = await message.answer(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
     # Tampilkan tombol link official setelah register
     from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
     if OFFICIAL_CHANNEL or OFFICIAL_GROUP:
-        await message.answer(
+        _sent = await message.answer(
             "📢 *Bergabung ke komunitas official kami!*\n"
             "_(Dapatkan info update, event, dan tips mining terbaru!)_",
             reply_markup=_official_links_kb(),
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.text == "👥 Gabung Grup")
 async def btn_gabung_grup(message: Message):
     from config import OFFICIAL_GROUP
     if not OFFICIAL_GROUP:
-        await message.answer("ℹ️ Link grup belum dikonfigurasi.", parse_mode="Markdown")
+        _sent = await message.answer("ℹ️ Link grup belum dikonfigurasi.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👥 Gabung Grup Sekarang", url=OFFICIAL_GROUP)]
     ])
-    await message.answer(
+    _sent = await message.answer(
         "👥 *Gabung Grup Official Mining Bot!*\n\n"
         "Diskusi, tanya jawab, dan info update game ada di sini.\n"
         "Klik tombol di bawah untuk bergabung:",
         reply_markup=kb,
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(F.text == "📢 Gabung Channel")
 async def btn_gabung_channel(message: Message):
     from config import OFFICIAL_CHANNEL
     if not OFFICIAL_CHANNEL:
-        await message.answer("ℹ️ Link channel belum dikonfigurasi.", parse_mode="Markdown")
+        _sent = await message.answer("ℹ️ Link channel belum dikonfigurasi.", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Gabung Channel Sekarang", url=OFFICIAL_CHANNEL)]
     ])
-    await message.answer(
+    _sent = await message.answer(
         "📢 *Gabung Channel Official Mining Bot!*\n\n"
         "Dapatkan info update, event, tips mining, dan pengumuman terbaru.\n"
         "Klik tombol di bawah untuk bergabung:",
         reply_markup=kb,
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "close_welcome")
@@ -262,7 +274,8 @@ async def cb_main_menu(callback: CallbackQuery):
     try:
         # Kalau pesan sebelumnya adalah foto/media, edit tidak bisa — kirim baru
         if callback.message.photo or callback.message.animation or callback.message.document:
-            await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             try:
                 await callback.message.delete()
             except Exception:
@@ -271,7 +284,8 @@ async def cb_main_menu(callback: CallbackQuery):
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     except Exception:
         try:
-            await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
         except Exception:
             pass
     await callback.answer()
@@ -286,10 +300,12 @@ async def cb_noop(callback: CallbackQuery):
 async def cmd_links(message: Message):
     from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
     if not OFFICIAL_CHANNEL and not OFFICIAL_GROUP:
-        await message.answer("ℹ️ Belum ada link official yang dikonfigurasi.")
+        _sent = await message.answer("ℹ️ Belum ada link official yang dikonfigurasi.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
-    await message.answer(
+    _sent = await message.answer(
         "📢 *Link Official Mining Bot*",
         reply_markup=_official_links_kb(),
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
