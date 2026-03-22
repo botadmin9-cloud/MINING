@@ -7,7 +7,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "mining_bot.db"
+from config import DB_PATH  # baca dari .env via config.py
 
 # Global lock untuk operasi write kritis agar tidak terjadi race condition
 # (terutama saat user klik multi-mine atau double-sell cepat)
