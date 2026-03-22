@@ -41,8 +41,8 @@ DB_PATH = DATABASE_URL  # alias untuk kompatibilitas bot.py & database.py
 MARKET_CHANNEL_ID = os.getenv("MARKET_CHANNEL_ID", "")  # isi di .env dgn integer ID, contoh: -1001234567890
 
 # Link channel & grup official (isi di .env)
-OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL", "")  # Isi di .env, contoh: https://t.me/yourchannel
-OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP", "")    # Isi di .env, contoh: https://t.me/yourgroup
+OFFICIAL_CHANNEL = os.getenv("OFFICIAL_CHANNEL","https://t.me/miningholic")  # Isi di .env, contoh: https://t.me/yourchannel
+OFFICIAL_GROUP   = os.getenv("OFFICIAL_GROUP","https://t.me/miningholiic")    # Isi di .env, contoh: https://t.me/yourgroup
 
 
 STARTING_BALANCE        = 1000
