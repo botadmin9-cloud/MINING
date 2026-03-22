@@ -350,9 +350,12 @@ async def cmd_ores_list(message: Message):
                 await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
         return
 
-    # ── Tampilkan semua tier (ringkasan rapi) ─────────────────
+    # ── Tampilkan semua tier (rapi ke bawah) ─────────────────
     total_ores = sum(len(v) for v in grouped.values())
-    lines = [
+
+    tier_display_order = list(reversed(TIER_ORDER))  # dari terbaik ke terburuk
+
+    header = [
         "📖 *DAFTAR ORE — Semua Tier*",
         "━━━━━━━━━━━━━━━━━━━━",
         f"🪨 Total: *{total_ores} jenis ore* tersedia",
@@ -360,51 +363,28 @@ async def cmd_ores_list(message: Message):
         "💡 `/ores [tier]` untuk detail lengkap",
         "Contoh: `/ores common` · `/ores rare` · `/ores divine`",
         "",
-        "┌────────────────────────────────",
     ]
+    await message.answer("\n".join(header), parse_mode="Markdown")
 
-    tier_display_order = list(reversed(TIER_ORDER))  # dari terbaik ke terburuk
+    # Kirim setiap tier sebagai pesan tersendiri agar rapi dan tidak terpotong
     for tier in tier_display_order:
         ores_in = grouped.get(tier, [])
         if not ores_in:
             continue
         emoji, label = TIER_DISPLAY.get(tier, ("🪨", tier.upper()))
-        is_last_tier = (tier == TIER_ORDER[0])  # common = terakhir ditampilkan
-        lines.append(f"│ {emoji} *{label}* `({len(ores_in)} ore)`")
-        # Tampilkan nama-nama ore dalam kolom rapi (max 4 per baris)
-        ore_names = []
-        for oid, o in ores_in:
-            ore_emoji = o.get('emoji', '')
-            ore_name  = o.get('name', oid)
-            clean_name = ore_name.strip()
-            if clean_name.startswith(ore_emoji):
-                clean_name = clean_name[len(ore_emoji):].strip()
-            ore_names.append(f"{ore_emoji} {clean_name}")
-        # Susun per baris, 3 ore per baris
-        for j in range(0, len(ore_names), 3):
-            chunk = ore_names[j:j+3]
-            lines.append("│   " + "  ·  ".join(chunk))
-        lines.append("│")
-
-    lines[-1] = "└────────────────────────────────"
-
-    full = "\n".join(lines)
-    if len(full) <= 4000:
-        await message.answer(full, parse_mode="Markdown")
-    else:
-        await message.answer("\n".join(lines[:8]), parse_mode="Markdown")
-        for tier in tier_display_order:
-            ores_in = grouped.get(tier, [])
-            if not ores_in:
-                continue
-            emoji, label = TIER_DISPLAY.get(tier, ("🪨", tier.upper()))
-            chunk = [f"┌─ {emoji} *{label}* `({len(ores_in)} ore)`"]
-            for oid, o in ores_in:
-                ore_emoji = o.get('emoji', '')
-                ore_name  = o.get('name', oid)
-                clean_name = ore_name.strip()
-                if clean_name.startswith(ore_emoji):
-                    clean_name = clean_name[len(ore_emoji):].strip()
-                chunk.append(f"│ {ore_emoji} {clean_name}")
-            chunk.append("└────────────────────")
-            await message.answer("\n".join(chunk), parse_mode="Markdown")
+        lines = [f"{emoji} *{label}* — {len(ores_in)} ore", ""]
+        for i, (ore_id, ore) in enumerate(ores_in):
+            ore_emoji = ore.get('emoji', '🪨')
+            ore_name  = ore.get('name', ore_id).strip()
+            if ore_name.startswith(ore_emoji):
+                ore_name = ore_name[len(ore_emoji):].strip()
+            is_last = (i == len(ores_in) - 1)
+            connector = "└" if is_last else "├"
+            lines.append(f"{connector} {ore_emoji} *{ore_name}*")
+            lines.append(f"   💰 `{ore.get('value',0):,}` koin  🎲 `{ore.get('rarity',0)}%`")
+            if not is_last:
+                lines.append("│")
+        chunk_text = "\n".join(lines)
+        if len(chunk_text) > 4000:
+            chunk_text = chunk_text[:3990] + "\n_...(terpotong)_"
+        await message.answer(chunk_text, parse_mode="Markdown")
