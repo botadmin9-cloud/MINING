@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from database import get_user
 from keyboards import equipment_kb
 from config import TOOLS, ZONES
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -14,7 +15,8 @@ router = Router()
 async def show_equipment(message: Message):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start untuk mendaftar!")
+        _sent = await message.answer("❌ Ketik /start untuk mendaftar!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     tool = TOOLS.get(user["current_tool"], TOOLS["stone_pick"])
@@ -45,5 +47,6 @@ async def show_equipment(message: Message):
         f"{tools_txt}\n"
         f"Tekan alat untuk ganti:"
     )
-    await message.answer(text, reply_markup=equipment_kb(user["owned_tools"], user["current_tool"]),
+    _sent = await message.answer(text, reply_markup=equipment_kb(user["owned_tools"], user["current_tool"]),
                          parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
