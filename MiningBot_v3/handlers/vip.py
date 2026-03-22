@@ -5,6 +5,7 @@ from aiogram.types import Message, CallbackQuery, PhotoSize
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from middlewares import register_message_owner
 
 from config import ADMIN_IDS, VIP_PRICES, VIP_TRANSFER_INFO, TOPUP_TRANSFER_INFO
 from database import get_user, update_user, add_balance, is_dynamic_admin, get_vip_photo, get_topup_photo
@@ -72,12 +73,13 @@ async def cb_shop_vip(callback: CallbackQuery):
     vip_photo = await get_vip_photo()
     try:
         if vip_photo:
-            await callback.message.answer_photo(
+            _sent = await callback.message.answer_photo(
                 photo=vip_photo["photo_id"],
                 caption=text,
                 reply_markup=kb,
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             await callback.message.delete()
         else:
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -107,7 +109,6 @@ async def cb_vip_buy(callback: CallbackQuery, state: FSMContext):
         f"📅 *Durasi:* {plan['label']} ({plan['days']} hari)\n\n"
         f"💳 *Transfer ke:*\n"
         f"`{VIP_TRANSFER_INFO}`\n\n"
-        f"📝 *Catatan transfer:* `VIP_{plan_id}_{uid}`\n\n"
         f"Setelah transfer, klik tombol di bawah\n"
         f"dan kirim foto bukti transfer.\n\n"
         f"⚠️ VIP akan diaktifkan setelah admin verifikasi (maks 1x24 jam)"
@@ -176,12 +177,13 @@ async def cb_shop_topup(callback: CallbackQuery):
     topup_photo = await get_topup_photo()
     try:
         if topup_photo:
-            await callback.message.answer_photo(
+            _sent = await callback.message.answer_photo(
                 photo=topup_photo["photo_id"],
                 caption=text,
                 reply_markup=kb,
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             await callback.message.delete()
         else:
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -220,7 +222,6 @@ async def cb_topup_select(callback: CallbackQuery, state: FSMContext):
         f"🪙 *Koin diterima:* `{pkg['coins']:,}` koin\n\n"
         f"💳 *Transfer ke:*\n"
         f"`{TOPUP_TRANSFER_INFO}`\n\n"
-        f"📝 *Catatan transfer:* `TOPUP_{pkg_id}_{uid}`\n\n"
         f"Setelah transfer, klik tombol dan kirim foto bukti.\n"
         f"⚠️ Saldo akan ditambahkan setelah admin verifikasi (maks 1x24 jam)"
     )
@@ -294,12 +295,13 @@ async def handle_vip_proof_photo(message: Message, state: FSMContext):
             logger.warning(f"Gagal kirim bukti VIP ke admin {admin_id}: {e}")
 
     await state.clear()
-    await message.answer(
+    _sent = await message.answer(
         "✅ *Bukti transfer VIP berhasil dikirim!*\n\n"
         "Admin akan memverifikasi dalam 1x24 jam.\n"
         "Kamu akan mendapat notifikasi saat VIP aktif. 👑",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(VipProofState.waiting_topup_proof, F.photo)
@@ -327,12 +329,13 @@ async def handle_topup_proof_photo(message: Message, state: FSMContext):
             logger.warning(f"Gagal kirim bukti topup ke admin {admin_id}: {e}")
 
     await state.clear()
-    await message.answer(
+    _sent = await message.answer(
         "✅ *Bukti transfer Top Up berhasil dikirim!*\n\n"
         "Admin akan memverifikasi dalam 1x24 jam.\n"
         "Kamu akan mendapat notifikasi saat saldo ditambahkan. 💰",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ── ADMIN: GIVE VIP ────────────────────────────────────────────
@@ -344,33 +347,37 @@ async def cmd_admin_givevip(message: Message):
 
     parts = message.text.strip().split()
     if len(parts) < 3:
-        await message.answer(
+        _sent = await message.answer(
             "❌ Format salah!\n"
             "Gunakan: `/admin_givevip <user_id> <plan_id>`\n\n"
             "Plan ID: `3_days`, `7_days`, `14_days`, `30_days`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     try:
         target_uid = int(parts[1])
         plan_id = parts[2]
     except ValueError:
-        await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        _sent = await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     plan = VIP_PRICES.get(plan_id)
     if not plan:
-        await message.answer(
+        _sent = await message.answer(
             f"❌ Plan `{plan_id}` tidak ditemukan!\n"
             "Plan tersedia: `3_days`, `7_days`, `14_days`, `30_days`",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     user = await get_user(target_uid)
     if not user:
-        await message.answer(f"❌ User `{target_uid}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ User `{target_uid}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     # Hitung expiry — extend jika sudah VIP
@@ -423,7 +430,7 @@ async def cmd_admin_givevip(message: Message):
         logger.warning(f"Gagal notifikasi VIP ke user {target_uid}: {e}")
 
     admin_uname = message.from_user.full_name
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *VIP berhasil diberikan!*\n\n"
         f"👤 User: `{target_uid}`\n"
         f"📦 Paket: *{plan['label']}*\n"
@@ -431,6 +438,7 @@ async def cmd_admin_givevip(message: Message):
         f"👑 Diberikan oleh: {admin_uname}",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("admin_revokevip"))
@@ -440,18 +448,21 @@ async def cmd_admin_revokevip(message: Message):
 
     parts = message.text.strip().split()
     if len(parts) < 2:
-        await message.answer("❌ Format: `/admin_revokevip <user_id>`", parse_mode="Markdown")
+        _sent = await message.answer("❌ Format: `/admin_revokevip <user_id>`", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     try:
         target_uid = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        _sent = await message.answer("❌ user_id harus angka!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     user = await get_user(target_uid)
     if not user:
-        await message.answer(f"❌ User `{target_uid}` tidak ditemukan!", parse_mode="Markdown")
+        _sent = await message.answer(f"❌ User `{target_uid}` tidak ditemukan!", parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     await update_user(target_uid, vip_expires_at=None, vip_type=None)
@@ -465,7 +476,8 @@ async def cmd_admin_revokevip(message: Message):
     except Exception:
         pass
 
-    await message.answer(f"✅ VIP user `{target_uid}` berhasil dicabut.", parse_mode="Markdown")
+    _sent = await message.answer(f"✅ VIP user `{target_uid}` berhasil dicabut.", parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("vip"))
@@ -473,7 +485,8 @@ async def cmd_vip_status(message: Message):
     """Cek status VIP."""
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start dulu!")
+        _sent = await message.answer("❌ Ketik /start dulu!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     from config import VIP_COOLDOWN_REDUCTION, VIP_ENERGY_REGEN_BONUS, VIP_LUCK_BONUS, VIP_CRIT_BONUS
@@ -489,4 +502,5 @@ async def cmd_vip_status(message: Message):
         f"   💥 Critical `+{int(VIP_CRIT_BONUS*100)}%`\n\n"
         "💳 Beli VIP di *🏪 Shop → 👑 VIP Member*"
     )
-    await message.answer(text, parse_mode="Markdown")
+    _sent = await message.answer(text, parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
