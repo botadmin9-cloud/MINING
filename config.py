@@ -78,8 +78,8 @@ VIP_PRICES = {
     "14_days":  {"label": "14 Hari", "price": 25000, "days": 14},
     "30_days":  {"label": "1 Bulan", "price": 50000, "days": 30},
 }
-VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO", "Isi info rekening di .env (VIP_TRANSFER_INFO)")
-TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO", "Isi info rekening di .env (TOPUP_TRANSFER_INFO)")
+VIP_TRANSFER_INFO = os.getenv("VIP_TRANSFER_INFO","Bank SEABANK: 901919719088 Erik Martin")
+TOPUP_TRANSFER_INFO = os.getenv("TOPUP_TRANSFER_INFO","Bank SEABANK: 901919719088 Erik Martin")
 TOPUP_RATE = 1000  # 1 IDR = 1000 koin (contoh)
 
 # FIX #10: Transfer ore config
