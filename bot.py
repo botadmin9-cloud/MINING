@@ -22,28 +22,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PLAYER_COMMANDS = [
-    BotCommand(command="start",       description="🏠 Menu utama"),
-    BotCommand(command="mine",        description="⛏️ Mining"),
-    BotCommand(command="bag",         description="🎒 Lihat & kelola ore"),
-    BotCommand(command="profile",     description="👤 Profil kamu"),
-    BotCommand(command="setname",     description="✏️ Ganti nama game"),
-    BotCommand(command="shop",        description="🏪 Toko alat & item"),
-    BotCommand(command="inventory",   description="🎁 Inventaris item"),
-    BotCommand(command="equipment",   description="🔧 Peralatan"),
-    BotCommand(command="market",      description="🛒 Market jual beli ore"),
-    BotCommand(command="daily",       description="🎁 Bonus harian"),
-    BotCommand(command="leaderboard", description="🏆 Papan peringkat"),
-    BotCommand(command="favorite",    description="⭐ Ore favorit"),
-    BotCommand(command="museum",      description="🏛️ Museum ore langka"),
-    BotCommand(command="buyenergy",   description="⚡ Upgrade Max Energy (via Shop)"),
-    BotCommand(command="buyslot",     description="🎒 Upgrade Slot Bag (via Shop)"),
-    BotCommand(command="help",        description="❓ Panduan bermain"),
-    BotCommand(command="vip",         description="👑 Cek status VIP"),
-    BotCommand(command="transfer",    description="📦 Transfer ore ke pemain lain"),
+    BotCommand(command="start",        description="🏠 Menu utama"),
+    BotCommand(command="mine",         description="⛏️ Mining"),
+    BotCommand(command="bag",          description="🎒 Lihat & kelola ore"),
+    BotCommand(command="profile",      description="👤 Profil kamu"),
+    BotCommand(command="shop",         description="🏪 Toko alat & item"),
+    BotCommand(command="inventory",    description="🎁 Inventaris item"),
+    BotCommand(command="equipment",    description="🔧 Peralatan"),
+    BotCommand(command="market",       description="🛒 Market jual beli ore"),
+    BotCommand(command="daily",        description="🎁 Bonus harian"),
+    BotCommand(command="leaderboard",  description="🏆 Papan peringkat"),
+    BotCommand(command="favorite",     description="⭐ Ore favorit"),
+    BotCommand(command="museum",       description="🏛️ Museum ore langka"),
+    BotCommand(command="help",         description="❓ Panduan bermain"),
+    BotCommand(command="vip",          description="👑 Cek status VIP"),
+    BotCommand(command="transfer",     description="📦 Transfer ore ke pemain lain"),
     BotCommand(command="transferinfo", description="📊 Info sisa transfer minggu ini"),
-    BotCommand(command="ores",        description="📖 Lihat semua ore per rarity"),
-    BotCommand(command="rare_ore",    description="💎 Lihat ore rare & langka"),
-    BotCommand(command="links",       description="📢 Link grup & channel official"),
+    BotCommand(command="ores",         description="📖 Lihat semua ore per rarity"),
+    BotCommand(command="rare_ore",     description="💎 Lihat ore rare & langka"),
+    BotCommand(command="links",        description="📢 Link grup & channel official"),
+    BotCommand(command="resetmining",  description="🔄 Reset jika stuck saat mining"),
 ]
 
 ADMIN_EXTRA_COMMANDS = [
@@ -61,12 +59,27 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand(command="admin_givezone",        description="🌍 Buka zona untuk user"),
     BotCommand(command="admin_reset",           description="🔄 Reset data user"),
     BotCommand(command="admin_resetall",        description="⚠️ Reset SEMUA data pemain"),
+    BotCommand(command="admin_ban",             description="🚫 Ban user"),
+    BotCommand(command="admin_unban",           description="✅ Unban user"),
     BotCommand(command="admin_listadmin",       description="🛡️ Lihat daftar admin"),
     BotCommand(command="admin_addadmin",        description="➕ Tambah admin baru"),
     BotCommand(command="admin_removeadmin",     description="➖ Hapus admin dinamis"),
-    BotCommand(command="admin_setorephoto",     description="📸 Pasang foto ore"),
+    BotCommand(command="admin_setorephoto",     description="📸 Pasang foto/GIF ore"),
     BotCommand(command="admin_listorephoto",    description="📸 Daftar foto ore"),
     BotCommand(command="admin_delorephoto",     description="📸 Hapus foto ore"),
+    BotCommand(command="admin_settoolphoto",    description="📸 Pasang foto/GIF alat"),
+    BotCommand(command="admin_listtoolphoto",   description="📸 Daftar foto alat"),
+    BotCommand(command="admin_deltoolphoto",    description="📸 Hapus foto alat"),
+    BotCommand(command="admin_setzonephoto",    description="📸 Pasang foto/GIF zona"),
+    BotCommand(command="admin_listzonephoto",   description="📸 Daftar foto zona"),
+    BotCommand(command="admin_delzonephoto",    description="📸 Hapus foto zona"),
+    BotCommand(command="admin_setitemphoto",    description="📸 Pasang foto/GIF item"),
+    BotCommand(command="admin_listitemphoto",   description="📸 Daftar foto item"),
+    BotCommand(command="admin_delitemphoto",    description="📸 Hapus foto item"),
+    BotCommand(command="admin_setvipphoto",     description="📸 Pasang foto/GIF VIP"),
+    BotCommand(command="admin_delvipphoto",     description="📸 Hapus foto VIP"),
+    BotCommand(command="admin_settopupphoto",   description="📸 Pasang foto/GIF TopUp"),
+    BotCommand(command="admin_deltopupphoto",   description="📸 Hapus foto TopUp"),
     BotCommand(command="admin_givevip",         description="👑 Beri VIP ke user"),
     BotCommand(command="admin_revokevip",       description="👑 Cabut VIP dari user"),
     BotCommand(command="admin_tools",           description="🔧 Daftar tool_id"),
@@ -78,7 +91,6 @@ ADMIN_EXTRA_COMMANDS = [
 
 async def set_bot_commands(bot: Bot):
     await bot.set_my_commands(PLAYER_COMMANDS, scope=BotCommandScopeDefault())
-    # Gabungkan admin statis dan dinamis agar semua admin dapat extra commands
     all_admin_ids = await get_all_admin_ids()
     for admin_id in all_admin_ids:
         try:
@@ -90,22 +102,36 @@ async def set_bot_commands(bot: Bot):
             logger.warning(f"Gagal set commands untuk admin {admin_id}: {e}")
 
 
+async def reset_stuck_mining_multi():
+    """Reset semua user yang is_mining_multi=1 saat bot restart.
+    Ini mencegah user stuck tidak bisa mining setelah bot crash/restart."""
+    import aiosqlite
+    from config import DB_PATH
+    try:
+        async with aiosqlite.connect(DB_PATH, timeout=30) as db:
+            cur = await db.execute(
+                "UPDATE users SET is_mining_multi=0, mining_multi_type=NULL, "
+                "mining_multi_started=NULL WHERE is_mining_multi=1"
+            )
+            await db.commit()
+            if cur.rowcount > 0:
+                logger.info(f"♻️ Reset {cur.rowcount} user yang stuck is_mining_multi=1")
+    except Exception as e:
+        logger.warning(f"Gagal reset stuck mining multi: {e}")
+
+
 async def main():
-    # Inisialisasi database
     await init_db()
+    await reset_stuck_mining_multi()
     await get_all_admin_ids()
     logger.info("✅ Database initialized")
 
     bot = Bot(token=BOT_TOKEN)
-    # MemoryStorage: FSM state hilang saat bot restart (normal untuk bot Telegram)
-    # Untuk production skala besar, pertimbangkan RedisStorage
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Middleware auto-register user
     dp.message.middleware(AutoRegisterMiddleware())
     dp.callback_query.middleware(AutoRegisterMiddleware())
 
-    # Register semua router (urutan penting - router lebih spesifik duluan)
     dp.include_router(start.router)
     dp.include_router(mining.router)
     dp.include_router(shop.router)
@@ -142,7 +168,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Bot dihentikan oleh pengguna")
     except ValueError as e:
-        # Konfigurasi tidak lengkap (BOT_TOKEN / ADMIN_IDS kosong)
         logger.critical(f"❌ Konfigurasi error: {e}")
         logger.critical("Pastikan file .env sudah diisi dengan benar!")
         exit(1)
