@@ -10,6 +10,7 @@ from database import (get_user, update_user, add_ore_to_inventory,
                       increment_transfer_send, increment_transfer_receive,
                       is_dynamic_admin)
 from keyboards import back_main_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -35,15 +36,17 @@ async def _is_admin(uid: int) -> bool:
 async def cmd_transfer(message: Message, state: FSMContext):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start terlebih dahulu!")
+        _sent = await message.answer("❌ Ketik /start terlebih dahulu!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     ore_inv = {k: v for k, v in user.get("ore_inventory", {}).items() if v > 0}
     if not ore_inv:
-        await message.answer(
+        _sent = await message.answer(
             "📦 *Inventory Ore Kosong!*\n\nMulai mining dulu untuk mendapat ore.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     # Cek batas kirim mingguan
@@ -51,16 +54,17 @@ async def cmd_transfer(message: Message, state: FSMContext):
     send_left = TRANSFER_ORE_MAX_SEND_WEEKLY - counts["send"]
 
     if send_left <= 0 and not await _is_admin(message.from_user.id):
-        await message.answer(
+        _sent = await message.answer(
             f"⛔ *Batas Transfer Mingguan Tercapai!*\n\n"
             f"Kamu sudah mengirim {TRANSFER_ORE_MAX_SEND_WEEKLY}x transfer minggu ini.\n"
             f"Batas reset setiap hari Senin pukul 00.00.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     await state.set_state(TransferOreState.waiting_target_id)
-    await message.answer(
+    _sent = await message.answer(
         f"📦 *Transfer Ore ke Pemain Lain*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 Sisa kirim minggu ini: *{send_left}x* dari {TRANSFER_ORE_MAX_SEND_WEEKLY}x\n\n"
@@ -71,6 +75,7 @@ async def cmd_transfer(message: Message, state: FSMContext):
             [InlineKeyboardButton(text="❌ Batal", callback_data="transfer_cancel")]
         ])
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "transfer_cancel")
@@ -92,20 +97,23 @@ async def process_transfer_target(message: Message, state: FSMContext):
     try:
         target_id = int(message.text.strip())
     except ValueError:
-        await message.answer("❌ Masukkan angka User ID yang valid! Coba lagi:")
+        _sent = await message.answer("❌ Masukkan angka User ID yang valid! Coba lagi:")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     if target_id == message.from_user.id:
-        await message.answer("❌ Tidak bisa transfer ke diri sendiri!")
+        _sent = await message.answer("❌ Tidak bisa transfer ke diri sendiri!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     target_user = await get_user(target_id)
     if not target_user:
-        await message.answer(
+        _sent = await message.answer(
             f"❌ User dengan ID `{target_id}` tidak ditemukan.\n"
             f"Pastikan ID benar dan user sudah pernah /start.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     # Cek batas terima mingguan penerima
@@ -113,12 +121,13 @@ async def process_transfer_target(message: Message, state: FSMContext):
     receive_left = TRANSFER_ORE_MAX_RECEIVE_WEEKLY - target_counts["receive"]
     if receive_left <= 0 and not await _is_admin(message.from_user.id):
         target_name = target_user.get("display_name") or target_user.get("first_name", "User")
-        await message.answer(
+        _sent = await message.answer(
             f"⛔ *Penerima sudah mencapai batas!*\n\n"
             f"*{target_name}* sudah menerima {TRANSFER_ORE_MAX_RECEIVE_WEEKLY}x transfer minggu ini.\n"
             f"Coba lagi minggu depan.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     # Simpan target, minta pilih ore
@@ -140,12 +149,13 @@ async def process_transfer_target(message: Message, state: FSMContext):
     rows.append([InlineKeyboardButton(text="❌ Batal", callback_data="transfer_cancel")])
 
     await state.set_state(TransferOreState.waiting_ore)
-    await message.answer(
+    _sent = await message.answer(
         f"✅ Penerima: *{target_name}* (ID: `{target_id}`)\n\n"
         f"Pilih ore yang ingin ditransfer:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ── Step 2: Pilih ore ─────────────────────────────────────────
@@ -189,18 +199,20 @@ async def process_transfer_qty(message: Message, state: FSMContext):
     try:
         qty = int(message.text.strip())
     except ValueError:
-        await message.answer("❌ Masukkan angka yang valid!")
+        _sent = await message.answer("❌ Masukkan angka yang valid!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     data = await state.get_data()
     if qty <= 0 or qty > data["qty_have"]:
-        await message.answer(f"❌ Jumlah harus antara 1 dan {data['qty_have']}!")
+        _sent = await message.answer(f"❌ Jumlah harus antara 1 dan {data['qty_have']}!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     await state.update_data(qty=qty)
     await state.set_state(TransferOreState.waiting_confirm)
 
-    await message.answer(
+    _sent = await message.answer(
         f"📋 *Konfirmasi Transfer*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📦 Ore   : {data['ore_emoji']} *{data['ore_name']}* x{qty}\n"
@@ -215,6 +227,7 @@ async def process_transfer_qty(message: Message, state: FSMContext):
             ]
         ])
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ── Step 4: Konfirmasi dan eksekusi ───────────────────────────
@@ -335,7 +348,8 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
 async def cmd_transfer_info(message: Message):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     counts = await get_transfer_week_counts(message.from_user.id)
@@ -344,7 +358,7 @@ async def cmd_transfer_info(message: Message):
     send_left    = max(0, TRANSFER_ORE_MAX_SEND_WEEKLY - send_used)
     receive_left = max(0, TRANSFER_ORE_MAX_RECEIVE_WEEKLY - receive_used)
 
-    await message.answer(
+    _sent = await message.answer(
         f"📦 *Info Transfer Ore*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📤 Kirim minggu ini    : `{send_used}/{TRANSFER_ORE_MAX_SEND_WEEKLY}` (sisa: {send_left}x)\n"
@@ -353,3 +367,4 @@ async def cmd_transfer_info(message: Message):
         f"Gunakan /transfer untuk kirim ore!",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
