@@ -6,6 +6,7 @@ from config import ORES, ADMIN_IDS
 from database import get_user, update_user, get_ore_photo, is_dynamic_admin
 from keyboards import back_main_kb
 from handlers.bag import _build_ore_detail
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -28,7 +29,8 @@ async def _is_admin(uid: int) -> bool:
 async def cmd_favorite(message: Message):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await _show_favorite(message, user, send_new=True)
 
@@ -140,7 +142,8 @@ async def cb_fav_remove(callback: CallbackQuery):
 async def cmd_museum(message: Message):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await _show_museum(message, user, send_new=True)
 
@@ -245,20 +248,22 @@ async def cb_museum_view_photos(callback: CallbackQuery):
             )
             if photo.get("caption"):
                 caption += f"\n💬 _{photo['caption']}_"
-            await callback.message.answer_photo(
+            _sent = await callback.message.answer_photo(
                 photo=photo["photo_id"],
                 caption=caption,
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             sent_any = True
 
     if not sent_any:
-        await callback.message.answer(
+        _sent = await callback.message.answer(
             "📸 Belum ada foto ore yang dipasang admin.\n"
             "Admin bisa pasang foto dengan `/admin_setorephoto <ore_id>`",
             reply_markup=back_main_kb(),
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -305,12 +310,13 @@ async def cmd_ores_list(message: Message):
         matched = next((t for t in TIER_ORDER if t.startswith(filter_tier)), None)
         if not matched:
             valid = " | ".join(TIER_ORDER)
-            await message.answer(
+            _sent = await message.answer(
                 f"❌ Tier `{filter_tier}` tidak dikenal.\n\n"
                 f"Tier yang tersedia:\n`{valid}`\n\n"
                 f"Contoh: `/ores rare` atau `/ores epic`",
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
             return
 
         ores_in = grouped[matched]
@@ -338,16 +344,19 @@ async def cmd_ores_list(message: Message):
 
         text = "\n".join(lines)
         if len(text) <= 4000:
-            await message.answer(text, parse_mode="Markdown")
+            _sent = await message.answer(text, parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         else:
             chunk_lines = lines[:3]
             for line in lines[3:]:
                 chunk_lines.append(line)
                 if len("\n".join(chunk_lines)) > 3500:
-                    await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
+                    _sent = await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
+                    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
                     chunk_lines = []
             if chunk_lines:
-                await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
+                _sent = await message.answer("\n".join(chunk_lines), parse_mode="Markdown")
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     # ── Tampilkan semua tier (rapi ke bawah) ─────────────────
@@ -364,7 +373,8 @@ async def cmd_ores_list(message: Message):
         "Contoh: `/ores common` · `/ores rare` · `/ores divine`",
         "",
     ]
-    await message.answer("\n".join(header), parse_mode="Markdown")
+    _sent = await message.answer("\n".join(header), parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
     # Kirim setiap tier sebagai pesan tersendiri agar rapi dan tidak terpotong
     for tier in tier_display_order:
@@ -387,4 +397,5 @@ async def cmd_ores_list(message: Message):
         chunk_text = "\n".join(lines)
         if len(chunk_text) > 4000:
             chunk_text = chunk_text[:3990] + "\n_...(terpotong)_"
-        await message.answer(chunk_text, parse_mode="Markdown")
+        _sent = await message.answer(chunk_text, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
