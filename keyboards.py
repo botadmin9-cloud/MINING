@@ -444,7 +444,7 @@ def topup_shop_kb() -> InlineKeyboardMarkup:
         ("💰 Rp 50.000 → 100 Juta Koin",  "topup_50k"),
         ("💰 Rp 125.000 → 250 Juta Koin","topup_125k"),
         ("💰 Rp 250.000 → 500 Juta Koin","topup_250k"),
-        ("💎 Rp 500.000 → 2 Milyar Koin","topup_500k"),
+        ("💎 Rp 500.000 → 2,5 Milyar Koin","topup_500k"),
     ]
     rows = [[InlineKeyboardButton(text=t, callback_data=d)] for t, d in packages]
     rows.append([InlineKeyboardButton(text="📸 Kirim Bukti Transfer", callback_data="topup_proof")])
