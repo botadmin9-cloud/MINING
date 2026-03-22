@@ -53,10 +53,13 @@ async def cmd_start(message: Message, state: FSMContext):
     # user by checking whether display_name is still the default (== first_name or empty),
     # AND the user has never mined (mine_count == 0) and has not changed their name yet.
     # In that case, re-enter the name-setup flow as if they are brand new.
+    from config import STARTING_BALANCE
     is_brand_new = (
         existing is not None
         and existing.get("mine_count", 0) == 0
         and existing.get("last_name_change") is None
+        and existing.get("balance", 0) <= STARTING_BALANCE
+        and len(existing.get("owned_tools", [])) <= 1
         and (
             not existing.get("display_name")
             or existing.get("display_name") == existing.get("first_name", "")
@@ -255,10 +258,22 @@ async def cb_main_menu(callback: CallbackQuery):
         f"🔧 Alat   : {tool['emoji']} {tool['name']}\n"
         f"📍 Zona   : {zone['name']}"
     )
+    kb = main_menu_kb()
     try:
-        await callback.message.edit_text(text, reply_markup=main_menu_kb(), parse_mode="Markdown")
+        # Kalau pesan sebelumnya adalah foto/media, edit tidak bisa — kirim baru
+        if callback.message.photo or callback.message.animation or callback.message.document:
+            await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+        else:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     except Exception:
-        pass
+        try:
+            await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        except Exception:
+            pass
     await callback.answer()
 
 
