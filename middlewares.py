@@ -4,6 +4,76 @@ from typing import Callable, Dict, Any, Awaitable
 
 from database import get_user, create_user, update_user
 
+# ─── Message Owner Cache ───────────────────────────────────────────────────────
+# Simpan siapa yang memiliki setiap pesan bot yang punya inline keyboard.
+# Key: (chat_id, message_id)  →  Value: user_id pemilik
+_message_owner: Dict[tuple, int] = {}
+_MAX_CACHE = 5000  # batas agar RAM tidak penuh
+
+
+def register_message_owner(chat_id: int, message_id: int, user_id: int) -> None:
+    """Daftarkan pemilik pesan bot (dipanggil setelah bot kirim pesan dengan tombol)."""
+    global _message_owner
+    if len(_message_owner) >= _MAX_CACHE:
+        # Hapus 500 entry terlama jika cache penuh
+        for key in list(_message_owner.keys())[:500]:
+            del _message_owner[key]
+    _message_owner[(chat_id, message_id)] = user_id
+
+
+def get_message_owner(chat_id: int, message_id: int) -> int | None:
+    """Ambil user_id pemilik pesan, atau None jika tidak terdaftar."""
+    return _message_owner.get((chat_id, message_id))
+
+
+# Callback data yang boleh dipencet siapa saja (tidak perlu cek pemilik)
+_PUBLIC_CALLBACKS = {
+    "noop",
+    "close_welcome",
+    "main_menu",
+    "lb_refresh",
+}
+
+# Prefix callback data yang boleh dipencet siapa saja
+_PUBLIC_PREFIXES = (
+    "lb_",
+)
+
+
+class OwnerOnlyCallbackMiddleware(BaseMiddleware):
+    """
+    Blokir inline keyboard callback dari user yang BUKAN pemilik pesan.
+    Hanya berlaku jika pesan sudah terdaftar via register_message_owner().
+    """
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        if isinstance(event, CallbackQuery) and event.message:
+            cb_data = event.data or ""
+
+            # Lewati callback yang memang publik
+            if cb_data in _PUBLIC_CALLBACKS:
+                return await handler(event, data)
+            if cb_data.startswith(_PUBLIC_PREFIXES):
+                return await handler(event, data)
+
+            chat_id = event.message.chat.id
+            msg_id  = event.message.message_id
+            uid     = event.from_user.id
+            owner   = get_message_owner(chat_id, msg_id)
+
+            if owner is not None and owner != uid:
+                await event.answer(
+                    "⛔ Tombol ini hanya bisa digunakan oleh pemain yang membuka menu ini.",
+                    show_alert=True
+                )
+                return  # Blokir handler, jangan lanjutkan
+
+        return await handler(event, data)
+
 
 class AutoRegisterMiddleware(BaseMiddleware):
     async def __call__(
