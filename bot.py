@@ -8,7 +8,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeCha
 from config import BOT_TOKEN, ADMIN_IDS
 from database import init_db
 from config import get_all_admin_ids
-from middlewares import AutoRegisterMiddleware
+from middlewares import AutoRegisterMiddleware, OwnerOnlyCallbackMiddleware
 from handlers import (start, mining, shop, profile, inventory,
                        equipment, daily, leaderboard, help,
                        admin, market, bag, favorite_museum)
@@ -131,6 +131,7 @@ async def main():
 
     dp.message.middleware(AutoRegisterMiddleware())
     dp.callback_query.middleware(AutoRegisterMiddleware())
+    dp.callback_query.middleware(OwnerOnlyCallbackMiddleware())
 
     dp.include_router(start.router)
     dp.include_router(mining.router)
