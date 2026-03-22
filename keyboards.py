@@ -11,14 +11,13 @@ from config import TOOLS, ITEMS, ZONES, TIER_COLORS
 def main_menu_kb() -> ReplyKeyboardMarkup:
     from config import OFFICIAL_CHANNEL, OFFICIAL_GROUP
     keyboard = [
-        [KeyboardButton(text="⛏️ Mining"),        KeyboardButton(text="👤 Profil")],
-        [KeyboardButton(text="🔧 Equipment"),      KeyboardButton(text="🎁 Inventaris")],  # FIX: 🎒→🔧 (duplikat emoji)
-        [KeyboardButton(text="🏪 Shop"),            KeyboardButton(text="🏆 Leaderboard")],
-        [KeyboardButton(text="📅 Daily"),           KeyboardButton(text="🛒 Market")],      # FIX: 🎁→📅 (duplikat emoji)
-        [KeyboardButton(text="🎒 Bag"),             KeyboardButton(text="⭐ Favorit")],
-        [KeyboardButton(text="🏛️ Museum"),          KeyboardButton(text="❓ Bantuan")],
+        [KeyboardButton(text="⛏️ Mining"),         KeyboardButton(text="👤 Profil")],
+        [KeyboardButton(text="🔧 Equipment"),       KeyboardButton(text="🎁 Inventaris")],
+        [KeyboardButton(text="🏪 Shop"),             KeyboardButton(text="🏆 Leaderboard")],
+        [KeyboardButton(text="📅 Daily"),            KeyboardButton(text="🛒 Market")],
+        [KeyboardButton(text="🎒 Bag"),              KeyboardButton(text="⭐ Favorit")],
+        [KeyboardButton(text="🏛️ Museum"),           KeyboardButton(text="❓ Bantuan")],
     ]
-    # Tampilkan tombol komunitas hanya jika dikonfigurasi
     community_row = []
     if OFFICIAL_GROUP:
         community_row.append(KeyboardButton(text="👥 Gabung Grup"))
@@ -361,15 +360,20 @@ def market_my_listings_kb(listings: list) -> InlineKeyboardMarkup:
 # ══════════════════════════════════════════════════════════════
 # PROFILE & LEADERBOARD
 # ══════════════════════════════════════════════════════════════
-def profile_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def profile_kb(can_change: bool = True) -> InlineKeyboardMarkup:
+    rows = [
         [
             InlineKeyboardButton(text="📊 Statistik Mining", callback_data="mine_stats"),
             InlineKeyboardButton(text="🏅 Prestasi",         callback_data="achievements"),
         ],
         [InlineKeyboardButton(text="📦 Ore Inventory", callback_data="ore_inv_view")],
-        [InlineKeyboardButton(text="🏠 Menu Utama", callback_data="main_menu")],
-    ])
+    ]
+    if can_change:
+        rows.append([InlineKeyboardButton(text="✏️ Ganti Nama", callback_data="profile_setname")])
+    else:
+        rows.append([InlineKeyboardButton(text="✏️ Ganti Nama (cooldown)", callback_data="profile_setname")])
+    rows.append([InlineKeyboardButton(text="🏠 Menu Utama", callback_data="main_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def leaderboard_kb(period: str = "weekly", field: str = "balance") -> InlineKeyboardMarkup:
