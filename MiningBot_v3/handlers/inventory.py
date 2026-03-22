@@ -7,6 +7,7 @@ from database import get_user
 from game import use_item, get_active_buffs
 from keyboards import inventory_kb
 from config import ITEMS
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -16,11 +17,13 @@ router = Router()
 async def show_inventory(message: Message):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     text, kb = _build_inventory_text(user)
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    _sent = await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 def _build_inventory_text(user: dict):
@@ -79,6 +82,7 @@ async def cb_use_item(callback: CallbackQuery):
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
         except Exception:
             try:
-                await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+                _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             except Exception:
                 pass
