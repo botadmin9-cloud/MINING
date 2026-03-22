@@ -266,13 +266,7 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
             )
             return
 
-    # Eksekusi transfer
-    removed = await remove_ore_from_inventory(sender_id, ore_id, qty)
-    if not removed:
-        await callback.answer("❌ Gagal mengurangi ore!", show_alert=True)
-        return
-
-    # Hitung KG yang ikut ditransfer (gunakan berat aktual dari ore_kg_data jika ada)
+    # Hitung KG yang akan ditransfer SEBELUM remove, karena data masih fresh di sender
     _ore_kg_data = sender.get("ore_kg_data", {})
     _total_sender_kg = _ore_kg_data.get(ore_id, 0.0)
     _sender_qty_before = sender.get("ore_inventory", {}).get(ore_id, 0)
@@ -283,6 +277,13 @@ async def cb_transfer_confirm(callback: CallbackQuery, state: FSMContext):
         # Fallback ke rata-rata berdasarkan config
         _ore_data = ORES.get(ore_id, {})
         _avg_kg = round((_ore_data.get("kg_min", 0.5) + _ore_data.get("kg_max", 2.0)) / 2 * qty, 4)
+
+    # Eksekusi transfer
+    removed = await remove_ore_from_inventory(sender_id, ore_id, qty)
+    if not removed:
+        await callback.answer("❌ Gagal mengurangi ore!", show_alert=True)
+        return
+
     await add_ore_to_inventory(target_id, ore_id, qty, _avg_kg)
 
     # Update hitungan (skip untuk admin)
