@@ -9,6 +9,7 @@ from config import TOOLS, ZONES, ACHIEVEMENTS, ORES, xp_for_level, ADMIN_IDS, BA
 from database import get_user, get_user_rank, get_ore_stats, update_user, is_dynamic_admin
 from game import regen_energy, energy_full_in, make_bar
 from keyboards import profile_kb, back_main_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -31,7 +32,8 @@ async def show_profile(message: Message):
     uid  = message.from_user.id
     user = await get_user(uid)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     user = await regen_energy(user)
     await _send_profile(message, user, message.from_user)
@@ -40,13 +42,7 @@ async def show_profile(message: Message):
 async def _send_profile(target, user: dict, tg_user):
     uid = user["user_id"]
     viewer_id = tg_user.id if hasattr(tg_user, "id") else uid
-    if await _is_admin(uid) and viewer_id != uid:
-        msg = "❌ Profil ini tidak dapat dilihat."
-        if isinstance(target, Message):
-            await target.answer(msg, reply_markup=back_main_kb())
-        else:
-            await target.message.edit_text(msg, reply_markup=back_main_kb())
-        return
+    # Profil admin dapat dilihat di grup maupun private
 
     rank    = await get_user_rank(uid)
     tool    = TOOLS.get(user["current_tool"], TOOLS["stone_pick"])
@@ -171,12 +167,13 @@ async def cb_profile_setname(callback: CallbackQuery, state: FSMContext):
             parse_mode="Markdown"
         )
     except Exception:
-        await callback.message.answer(
+        _sent = await callback.message.answer(
             f"✏️ *Ganti Nama Game*\n\n"
             f"Nama saat ini: *{current or '(belum diset)'}*\n\n"
             f"Masukkan nama baru (2–30 karakter):\nAtau ketik /cancel untuk batal.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
 
 
 # FIX 11: Pertahankan /setname sebagai alias (tidak dihapus sepenuhnya agar tidak error)
@@ -185,7 +182,8 @@ async def cmd_setname(message: Message, state: FSMContext):
     uid = message.from_user.id
     user = await get_user(uid)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     if not await _is_admin(uid):
@@ -198,19 +196,20 @@ async def cmd_setname(message: Message, state: FSMContext):
                     remaining = next_change - datetime.now()
                     days_left = remaining.days
                     hours_left = remaining.seconds // 3600
-                    await message.answer(
+                    _sent = await message.answer(
                         f"⏳ *Belum bisa ganti nama!*\n\n"
                         f"Ganti nama hanya bisa dilakukan *1x per minggu*.\n"
                         f"Coba lagi dalam: `{days_left}` hari `{hours_left}` jam.",
                         parse_mode="Markdown"
                     )
+                    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
                     return
             except Exception:
                 pass
 
     await state.set_state(SetNameState.waiting_name)
     current = user.get("display_name", "") if user else ""
-    await message.answer(
+    _sent = await message.answer(
         f"✏️ *Ganti Nama Game*\n\n"
         f"Nama saat ini: *{current or '(belum diset)'}*\n\n"
         f"⚠️ Nama hanya bisa diganti *1x per minggu*!\n\n"
@@ -218,6 +217,7 @@ async def cmd_setname(message: Message, state: FSMContext):
         f"Atau /cancel untuk batal.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("cancel"))
@@ -225,27 +225,31 @@ async def cmd_cancel(message: Message, state: FSMContext):
     current = await state.get_state()
     if current:
         await state.clear()
-        await message.answer("❌ Proses dibatalkan.")
+        _sent = await message.answer("❌ Proses dibatalkan.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer("ℹ️ Tidak ada proses yang aktif saat ini.")
+        _sent = await message.answer("ℹ️ Tidak ada proses yang aktif saat ini.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(SetNameState.waiting_name)
 async def process_setname(message: Message, state: FSMContext):
     name = message.text.strip()
     if len(name) < 2 or len(name) > 30:
-        await message.answer("❌ Nama harus 2–30 karakter. Coba lagi:")
+        _sent = await message.answer("❌ Nama harus 2–30 karakter. Coba lagi:")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     await state.clear()
     now = datetime.now().isoformat()
     await update_user(message.from_user.id, display_name=name, last_name_change=now)
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *Nama game berhasil diubah!*\n\n"
         f"Nama baru: *{name}*\n\n"
         f"ℹ️ Nama bisa diganti lagi dalam *7 hari*.\n"
         f"Nama ini akan tampil di Profil dan Leaderboard.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "mine_stats")
