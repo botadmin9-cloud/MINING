@@ -10,6 +10,7 @@ from database import get_user, update_user, add_balance, remove_ore_from_invento
 from game import get_active_buffs, get_buff_val
 # buy_bag_slot and buy_energy_upgrade moved to shop.py
 from keyboards import back_main_kb
+from middlewares import register_message_owner
 
 router = Router()
 BAG_PAGE_SIZE = 10
@@ -204,17 +205,20 @@ async def _bag_text(user: dict, page: int, rare_only: bool = False) -> tuple:
 async def cmd_bag(message: Message):
     user = await get_user(message.from_user.id)
     if not user:
-        await message.answer("❌ Ketik /start!")
+        _sent = await message.answer("❌ Ketik /start!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     ore_inv = user.get("ore_inventory") or {}
     if not ore_inv or not any(v > 0 for v in ore_inv.values()):
-        await message.answer(
+        _sent = await message.answer(
             "🎒 *Bag Kamu Kosong*\n\nMulai mining untuk mengisi bag!",
             reply_markup=back_main_kb(), parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     text, kb, _, _ = await _bag_text(user, 0)
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    _sent = await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "bag_view_rare")
@@ -358,12 +362,13 @@ async def cb_bag_detail(callback: CallbackQuery):
     ore_photo = await get_ore_photo(ore_id)
     if ore_photo:
         try:
-            await callback.message.answer_photo(
+            _sent = await callback.message.answer_photo(
                 photo=ore_photo["photo_id"],
                 caption=text,
                 reply_markup=kb,
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             await callback.message.delete()
         except Exception:
             try:
@@ -374,7 +379,8 @@ async def cb_bag_detail(callback: CallbackQuery):
         try:
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
         except Exception:
-            await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
     await callback.answer()
 
 
@@ -388,7 +394,8 @@ async def cb_bag_back(callback: CallbackQuery):
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     except Exception:
-        await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
     await callback.answer()
 
 
@@ -683,17 +690,19 @@ async def cb_bag_sell_rare_yes(callback: CallbackQuery):
 
 @router.message(Command("buyslot"))
 async def cmd_buyslot(message: Message):
-    await message.answer(
+    _sent = await message.answer(
         "💡 Pembelian *Slot Bag* sekarang tersedia di *🏪 Shop → ⬆️ Upgrade*!\n\n"
         "Ketik `🏪 Shop` atau `/shop` untuk akses.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("buyenergy"))
 async def cmd_buyenergy(message: Message):
-    await message.answer(
+    _sent = await message.answer(
         "💡 Pembelian *Tambah Energy* sekarang tersedia di *🏪 Shop → ⬆️ Upgrade*!\n\n"
         "Ketik `🏪 Shop` atau `/shop` untuk akses.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
