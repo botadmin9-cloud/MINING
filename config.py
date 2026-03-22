@@ -1,7 +1,12 @@
 import os
 import random
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+# Cari file .env secara eksplisit dari direktori file ini
+_BASE_DIR = Path(__file__).resolve().parent
+_ENV_PATH = _BASE_DIR / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=True)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 if not BOT_TOKEN:
