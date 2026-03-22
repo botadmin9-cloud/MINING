@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from middlewares import register_message_owner
 
 from config import ORES, ADMIN_IDS, MARKET_FEE_PERCENT, MARKET_DAILY_LIMIT, calculate_sell_price, format_kg
 from database import (get_user, get_market_listings, get_listing_by_id,
@@ -51,13 +52,14 @@ async def show_market(message: Message):
         cnt = await get_market_daily_count(uid)
         remaining = max(0, MARKET_DAILY_LIMIT - cnt)
         daily_left = f"\n📊 Sisa listing hari ini: *{remaining}/{MARKET_DAILY_LIMIT}*"
-    await message.answer(
+    _sent = await message.answer(
         f"🛒 *Market Ore*\n\n"
         f"Jual beli ore dengan pemain lain!\n"
         f"💡 Biaya listing: *{MARKET_FEE_PERCENT}%* dari total harga jual.{daily_left}",
         reply_markup=market_main_kb(),
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "market_menu")
@@ -336,12 +338,14 @@ async def process_sell_qty(message: Message, state: FSMContext):
     try:
         qty = int(message.text.strip())
     except ValueError:
-        await message.answer("❌ Masukkan angka yang valid!")
+        _sent = await message.answer("❌ Masukkan angka yang valid!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     data = await state.get_data()
     if qty <= 0 or qty > data["qty_have"]:
-        await message.answer(f"❌ Jumlah harus antara 1 dan {data['qty_have']}!")
+        _sent = await message.answer(f"❌ Jumlah harus antara 1 dan {data['qty_have']}!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     await state.update_data(qty=qty)
@@ -354,7 +358,7 @@ async def process_sell_qty(message: Message, state: FSMContext):
     kg_avg = (kg_min + kg_max) / 2
     suggest_per = calculate_sell_price(data["ore_id"], kg_avg)
     suggest = suggest_per * qty
-    await message.answer(
+    _sent = await message.answer(
         f"💰 Jual *{qty}x {data['ore_emoji']} {data['ore_name']}*\n\n"
         f"⚖️ Berat rata-rata: `{format_kg(kg_avg)}` /buah\n"
         f"💡 Harga per buah (est.): `{suggest_per:,}` koin\n"
@@ -362,6 +366,7 @@ async def process_sell_qty(message: Message, state: FSMContext):
         f"Ketik *total harga jual* dalam koin:",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(SellOreState.waiting_price)
@@ -369,23 +374,26 @@ async def process_sell_price(message: Message, state: FSMContext):
     try:
         price_total = int(message.text.strip().replace(".", "").replace(",", ""))
     except ValueError:
-        await message.answer("❌ Masukkan angka yang valid!")
+        _sent = await message.answer("❌ Masukkan angka yang valid!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     if price_total <= 0:
-        await message.answer("❌ Harga harus lebih dari 0!")
+        _sent = await message.answer("❌ Harga harus lebih dari 0!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     data = await state.get_data()
     qty = data["qty"]
     price_each = price_total // qty
     if price_each <= 0:
-        await message.answer(
+        _sent = await message.answer(
             f"❌ Harga terlalu kecil!\n"
             f"Total `{price_total}` koin untuk `{qty}` ore = `0` koin/buah.\n"
             f"Harga minimal: *{qty} koin* (1 koin/buah).",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
     fee = int(price_total * MARKET_FEE_PERCENT / 100)
     seller_gets = price_total - fee
@@ -395,13 +403,14 @@ async def process_sell_price(message: Message, state: FSMContext):
     if uid not in ADMIN_IDS:
         daily_count = await get_market_daily_count(uid)
         if daily_count >= MARKET_DAILY_LIMIT:
-            await message.answer(
+            _sent = await message.answer(
                 f"❌ *Batas Listing Harian Tercapai!*\n\n"
                 f"Kamu sudah membuat *{daily_count}* listing hari ini.\n"
                 f"Batas maksimal: *{MARKET_DAILY_LIMIT}x per hari*.\n\n"
                 f"Coba lagi besok! 🕐",
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
             await state.clear()
             # Kembalikan ore yang mungkin sudah dikurangi (belum dikurangi, jadi aman)
             return
@@ -437,7 +446,8 @@ async def process_sell_price(message: Message, state: FSMContext):
     )
 
     if not listing_id:
-        await message.answer("❌ Gagal membuat listing. Coba lagi!")
+        _sent = await message.answer("❌ Gagal membuat listing. Coba lagi!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         await state.clear()
         return
 
@@ -447,7 +457,8 @@ async def process_sell_price(message: Message, state: FSMContext):
         # Listing sudah terbuat tapi ore tidak bisa dikurangi — batalkan listing
         from database import cancel_market_listing
         await cancel_market_listing(listing_id, message.from_user.id)
-        await message.answer("❌ Ore tidak cukup di inventory!")
+        _sent = await message.answer("❌ Ore tidak cukup di inventory!")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         await state.clear()
         return
 
@@ -478,7 +489,7 @@ async def process_sell_price(message: Message, state: FSMContext):
     )
     await _notify_channel(message.bot, channel_msg)
 
-    await message.answer(
+    _sent = await message.answer(
         f"✅ *Listing Berhasil Dibuat!*\n\n"
         f"{data['ore_emoji']} *{data['ore_name']}* x{qty}\n"
         f"💰 Harga/buah : `{price_each:,}` koin\n"
@@ -491,6 +502,7 @@ async def process_sell_price(message: Message, state: FSMContext):
         reply_markup=market_main_kb(),
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 # ══════════════════════════════════════════════════════════════
