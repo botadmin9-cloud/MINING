@@ -6,7 +6,7 @@ from config import (ORES, ADMIN_IDS,
                     BAG_SLOT_DEFAULT,
                     calculate_sell_price, format_kg,
                     ORE_TIER_COLORS)
-from database import get_user, update_user, add_balance
+from database import get_user, update_user, add_balance, remove_ore_from_inventory
 from game import get_active_buffs, get_buff_val
 # buy_bag_slot and buy_energy_upgrade moved to shop.py
 from keyboards import back_main_kb
@@ -461,16 +461,13 @@ async def cb_bag_sellall(callback: CallbackQuery):
         total_kg_this = avg_kg * qty
     coins = _apply_coin_mult(user, calculate_sell_price(ore_id, total_kg_this))
 
-    ore_inv     = dict(user.get("ore_inventory", {}))
-    ore_kg_data = dict(ore_kg_data)
-    ore_inv.pop(ore_id, None)
-    ore_kg_data.pop(ore_id, None)
-    new_kg_used = max(0.0, round(user.get("bag_kg_used", 0.0) - total_kg_this, 2))
+    # BUG FIX: Gunakan remove_ore_from_inventory yang atomic (pakai _db_write_lock)
+    # agar tidak race condition jika user klik 2x cepat
+    removed = await remove_ore_from_inventory(callback.from_user.id, ore_id, qty)
+    if not removed:
+        await callback.answer("❌ Ore sudah habis atau gagal!", show_alert=True)
+        return
 
-    await update_user(callback.from_user.id,
-                      ore_inventory=ore_inv,
-                      ore_kg_data=ore_kg_data,
-                      bag_kg_used=new_kg_used)
     await add_balance(callback.from_user.id, coins, f"Jual {ore['name']} x{qty}")
     await callback.answer(f"✅ +{coins:,} koin dari {qty}x {ore['name']}", show_alert=True)
 
@@ -559,8 +556,12 @@ async def cb_bag_sell_everything_yes(callback: CallbackQuery):
         total_weight += total_kg_this
         total_coins  += _apply_coin_mult(user, calculate_sell_price(ore_id, total_kg_this))
 
-    await update_user(callback.from_user.id, ore_inventory={}, ore_kg_data={}, bag_kg_used=0.0)
-    await add_balance(callback.from_user.id, total_coins, f"Jual semua bag ({total_items} ore)")
+    # FIX: Gunakan _db_write_lock untuk KEDUA operasi (update_user + add_balance)
+    # agar sell-all tidak race condition saat user klik 2x cepat
+    from database import _db_write_lock
+    async with _db_write_lock:
+        await update_user(callback.from_user.id, ore_inventory={}, ore_kg_data={}, bag_kg_used=0.0)
+        await add_balance(callback.from_user.id, total_coins, f"Jual semua bag ({total_items} ore)")
 
     user = await get_user(callback.from_user.id)
     try:
@@ -653,11 +654,15 @@ async def cb_bag_sell_rare_yes(callback: CallbackQuery):
         ore_kg_data.pop(ore_id, None)
 
     new_kg_used = max(0.0, round(user.get("bag_kg_used", 0.0) - total_weight, 2))
-    await update_user(callback.from_user.id,
-                      ore_inventory=ore_inv,
-                      ore_kg_data=ore_kg_data,
-                      bag_kg_used=new_kg_used)
-    await add_balance(callback.from_user.id, total_coins, f"Jual semua rare ({total_items} ore)")
+    # FIX: Gunakan _db_write_lock untuk KEDUA operasi (update_user + add_balance)
+    # agar sell-rare tidak race condition saat user klik 2x cepat
+    from database import _db_write_lock
+    async with _db_write_lock:
+        await update_user(callback.from_user.id,
+                          ore_inventory=ore_inv,
+                          ore_kg_data=ore_kg_data,
+                          bag_kg_used=new_kg_used)
+        await add_balance(callback.from_user.id, total_coins, f"Jual semua rare ({total_items} ore)")
 
     user = await get_user(callback.from_user.id)
     try:
