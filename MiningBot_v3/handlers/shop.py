@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
+from middlewares import register_message_owner
 
 from config import (TOOLS, ITEMS, ZONES, ORES, TIER_COLORS, ADMIN_IDS,
                     BAG_SLOT_DEFAULT, BAG_SLOT_MAX, BAG_SLOT_STEP, BAG_SLOT_BASE_COST,
@@ -27,11 +28,12 @@ async def _is_admin(uid: int) -> bool:
 async def show_shop(message: Message):
     user = await get_user(message.from_user.id)
     balance_txt = f"\n💰 Saldo kamu: `{user['balance']:,}` koin" if user else ""
-    await message.answer(
+    _sent = await message.answer(
         f"🏪 *Toko Mining*{balance_txt}\n\nPilih kategori:",
         reply_markup=shop_main_kb(),
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "shop_menu")
@@ -215,12 +217,13 @@ async def cb_item_detail(callback: CallbackQuery):
     item_photo = await get_item_photo(item_id)
     if item_photo:
         try:
-            await callback.message.answer_photo(
+            _sent = await callback.message.answer_photo(
                 photo=item_photo["photo_id"],
                 caption=text,
                 reply_markup=item_detail_kb(item_id),
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             await callback.message.delete()
         except Exception:
             try:
@@ -272,12 +275,13 @@ async def cb_buy_item(callback: CallbackQuery):
         item_photo = await get_item_photo(item_id)
         if item_photo:
             try:
-                await callback.message.answer_photo(
+                _sent = await callback.message.answer_photo(
                     photo=item_photo["photo_id"],
                     caption=text,
                     reply_markup=item_detail_kb(item_id),
                     parse_mode="Markdown"
                 )
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
                 await callback.message.delete()
             except Exception:
                 try:
