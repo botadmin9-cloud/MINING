@@ -74,6 +74,7 @@ async def _send_profile(target, user: dict, tg_user):
     # Hitung kapan bisa ganti nama lagi
     last_change = user.get("last_name_change")
     name_cd_txt = ""
+    can_change_now = True
     if last_change and not await _is_admin(uid):
         try:
             lc_dt = datetime.fromisoformat(last_change)
@@ -82,7 +83,8 @@ async def _send_profile(target, user: dict, tg_user):
                 remaining = next_change - datetime.now()
                 days_left = remaining.days
                 hours_left = remaining.seconds // 3600
-                name_cd_txt = f"\n   _(Bisa ganti lagi: {days_left}h {hours_left}j lagi)_"
+                name_cd_txt = f"\n   _(Bisa ganti lagi: {days_left}h {hours_left}j)_"
+                can_change_now = False
             else:
                 name_cd_txt = "\n   _(Bisa ganti sekarang!)_"
         except Exception:
@@ -119,15 +121,65 @@ async def _send_profile(target, user: dict, tg_user):
         f"🔧 Alat Aktif  : {tool['emoji']} {tool['name']}\n"
         f"📍 Zona Aktif  : {zone['name']}\n"
         f"🏅 Prestasi    : `{len(user['achievements'])}` / `{len(ACHIEVEMENTS)}`"
-        f"{rebirth_txt}{vip_txt}\n\n"
-        f"💡 Ketik `/setname` untuk ganti nama game."
+        f"{rebirth_txt}{vip_txt}"
     )
+    # FIX 11: Gunakan profile_kb yang sudah ada tombol ganti nama
+    kb = profile_kb(can_change=can_change_now or _uid_is_admin)
     if isinstance(target, Message):
-        await target.answer(text, reply_markup=profile_kb(), parse_mode="Markdown")
+        await target.answer(text, reply_markup=kb, parse_mode="Markdown")
     else:
-        await target.message.edit_text(text, reply_markup=profile_kb(), parse_mode="Markdown")
+        await target.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
 
 
+# FIX 11: Callback untuk tombol "✏️ Ganti Nama" di profile
+@router.callback_query(F.data == "profile_setname")
+async def cb_profile_setname(callback: CallbackQuery, state: FSMContext):
+    uid = callback.from_user.id
+    user = await get_user(uid)
+    if not user:
+        await callback.answer("❌ Ketik /start!")
+        return
+
+    if not await _is_admin(uid):
+        last_change = user.get("last_name_change")
+        if last_change:
+            try:
+                lc_dt = datetime.fromisoformat(last_change)
+                next_change = lc_dt + timedelta(days=NAME_CHANGE_COOLDOWN_DAYS)
+                if datetime.now() < next_change:
+                    remaining = next_change - datetime.now()
+                    days_left = remaining.days
+                    hours_left = remaining.seconds // 3600
+                    await callback.answer(
+                        f"⏳ Belum bisa ganti nama!\nCoba lagi dalam {days_left}h {hours_left}j.",
+                        show_alert=True
+                    )
+                    return
+            except Exception:
+                pass
+
+    await state.set_state(SetNameState.waiting_name)
+    current = user.get("display_name", "") if user else ""
+    await callback.answer()
+    try:
+        await callback.message.edit_text(
+            f"✏️ *Ganti Nama Game*\n\n"
+            f"Nama saat ini: *{current or '(belum diset)'}*\n\n"
+            f"⚠️ Nama hanya bisa diganti *1x per minggu*!\n\n"
+            f"Masukkan nama baru (2–30 karakter):\n"
+            f"Atau ketik /cancel untuk batal.",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        await callback.message.answer(
+            f"✏️ *Ganti Nama Game*\n\n"
+            f"Nama saat ini: *{current or '(belum diset)'}*\n\n"
+            f"Masukkan nama baru (2–30 karakter):\nAtau ketik /cancel untuk batal.",
+            parse_mode="Markdown"
+        )
+
+
+# FIX 11: Pertahankan /setname sebagai alias (tidak dihapus sepenuhnya agar tidak error)
 @router.message(Command("setname"))
 async def cmd_setname(message: Message, state: FSMContext):
     uid = message.from_user.id
@@ -136,7 +188,6 @@ async def cmd_setname(message: Message, state: FSMContext):
         await message.answer("❌ Ketik /start!")
         return
 
-    # Cek cooldown (admin bebas)
     if not await _is_admin(uid):
         last_change = user.get("last_name_change")
         if last_change:
@@ -174,7 +225,7 @@ async def cmd_cancel(message: Message, state: FSMContext):
     current = await state.get_state()
     if current:
         await state.clear()
-        await message.answer("❌ Proses dibatalkan.", reply_markup=None)
+        await message.answer("❌ Proses dibatalkan.")
     else:
         await message.answer("ℹ️ Tidak ada proses yang aktif saat ini.")
 
@@ -224,7 +275,6 @@ async def cb_achievements(callback: CallbackQuery):
     done_count = len(achieved)
     total_count = len(ACHIEVEMENTS)
 
-    # Split into: unlocked (✅) and locked (⬜) — show unlocked first
     unlocked_lines = []
     locked_lines   = []
     for ach_id, ach in ACHIEVEMENTS.items():
@@ -240,12 +290,11 @@ async def cb_achievements(callback: CallbackQuery):
         header.append("")
     if locked_lines:
         header.append("*⬜ Belum Didapat:*")
-        header.extend(locked_lines[:20])  # max 20 locked shown
+        header.extend(locked_lines[:20])
         if len(locked_lines) > 20:
             header.append(f"_...dan {len(locked_lines)-20} prestasi lagi_")
 
     text = "\n".join(header)
-    # Telegram hard limit: truncate if needed
     if len(text) > 4000:
         text = text[:3990] + "\n_...(terpotong)_"
     try:
