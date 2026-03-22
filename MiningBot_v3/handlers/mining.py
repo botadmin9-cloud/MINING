@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
 from config import ADMIN_IDS, TOOLS, ZONES, ORES, ORE_TIER_COLORS
-from database import get_user, get_zone_photo, get_tool_photo, set_mining_multi_status
+from database import get_user, get_zone_photo, get_tool_photo, set_mining_multi_status, get_ore_photo
 from game import (perform_mine, build_mine_result_text, regen_energy,
                    energy_full_in, equip_tool, set_zone,
                    get_mine_cooldown_seconds, check_mine_cooldown, is_vip_active)
@@ -21,11 +21,9 @@ def _is_admin(uid: int) -> bool:
 
 
 def _zone_ore_list(zone_id: str) -> str:
-    """Buat daftar ore yang bisa didapat di zona ini."""
     zone = ZONES.get(zone_id, {})
     ore_bonus = zone.get("ore_bonus", {})
     if not ore_bonus:
-        # Zona surface - ore dasar
         return "🪨 Kerikil, ⬛ Batu Bara, 🗿 Batu Biasa, ⚙️ Bijih Besi, dll."
     ore_names = []
     for ore_id in list(ore_bonus.keys())[:6]:
@@ -36,15 +34,12 @@ def _zone_ore_list(zone_id: str) -> str:
 
 
 async def _mine_panel(user_id: int) -> tuple:
-    """Return (text, photo_id_or_None)"""
     user = await get_user(user_id)
     if not user:
         return "❌ Ketik /start", None
 
-    # Cek apakah sedang mining multi
     if user.get("is_mining_multi") and not _is_admin(user_id):
         multi_type = user.get("mining_multi_type", "?")
-        # Hitung sisa cooldown
         last_mine = user.get("last_mine_time")
         cd_secs = get_mine_cooldown_seconds(user, False)
         wait_txt = ""
@@ -79,13 +74,12 @@ async def _mine_panel(user_id: int) -> tuple:
     zone_id = user.get("current_zone", "surface")
     zone = ZONES.get(zone_id, ZONES["surface"])
     is_admin = _is_admin(user_id)
-    cooldown = 1 if is_admin else get_mine_cooldown_seconds(user, is_admin)  # FIX: teruskan is_admin
+    cooldown = 1 if is_admin else get_mine_cooldown_seconds(user, is_admin)
     vip_active = is_vip_active(user)
     admin_tag = " 👑 *[ADMIN — Gratis & Cepat]*" if is_admin else (" ✨ *[VIP]*" if vip_active else "")
 
     ore_list = _zone_ore_list(zone_id)
 
-    # ── Hitung sisa waktu cooldown ─────────────────────────────
     cooldown_status = ""
     if not is_admin:
         last_mine = user.get("last_mine_time")
@@ -124,7 +118,6 @@ async def _mine_panel(user_id: int) -> tuple:
         f"   ├ 🍀 Luck     : `{int(tool['luck_bonus']*100)}%` bonus\n"
         f"   └ ⚡ Biaya    : `-{tool['energy_cost']}` energy\n\n"
         f"📍 *Zona:* {zone['name']}\n"
-        f"   └ {zone['desc']}\n"
         f"   🪨 *Ore di zona ini:* _{ore_list}_\n\n"
         f"⚡ Energy: `{user['energy']}/{user['max_energy']}` "
         f"(penuh dalam *{energy_full_in(user)}*)\n"
@@ -133,7 +126,6 @@ async def _mine_panel(user_id: int) -> tuple:
         f"Pilih aksi mining:"
     )
 
-    # Cek foto zona
     zone_photo = await get_zone_photo(zone_id)
     photo_id = zone_photo["photo_id"] if zone_photo else None
 
@@ -167,7 +159,7 @@ async def cb_mine_menu(callback: CallbackQuery):
             try:
                 await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
             except Exception:
-                pass
+                await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
     except Exception:
         await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
@@ -183,7 +175,6 @@ async def cb_do_mine(callback: CallbackQuery):
         await callback.answer("❌ Ketik /start", show_alert=True)
         return
 
-    # Blokir jika sedang mining multi
     if user.get("is_mining_multi") and not is_admin:
         mt = user.get("mining_multi_type", "multi")
         await callback.answer(
@@ -201,6 +192,22 @@ async def cb_do_mine(callback: CallbackQuery):
     result = await perform_mine(uid, is_admin=is_admin)
     if result["ok"]:
         text = build_mine_result_text(result)
+        # FIX 5: Tampilkan foto ore yang didapat
+        ore_id = result.get("ore_id") or result.get("ore", {}).get("id")
+        ore_photo = await get_ore_photo(ore_id) if ore_id else None
+        if ore_photo:
+            try:
+                await callback.message.answer_photo(
+                    photo=ore_photo["photo_id"],
+                    caption=text,
+                    reply_markup=mine_action_kb(),
+                    parse_mode="Markdown"
+                )
+                await callback.message.delete()
+                await callback.answer()
+                return
+            except Exception:
+                pass
     else:
         text = result["msg"]
 
@@ -212,7 +219,6 @@ async def cb_do_mine(callback: CallbackQuery):
 
 
 def _format_duration(seconds: float) -> str:
-    """Format detik ke format jam:menit:detik yang mudah dibaca."""
     seconds = max(0, int(seconds))
     h = seconds // 3600
     m = (seconds % 3600) // 60
@@ -234,31 +240,73 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
         await callback.answer("❌ Ketik /start", show_alert=True)
         return
 
-    # Blokir jika sudah sedang mining multi
+    # GUARD #1: Cek apakah sedang mining multi
     if user.get("is_mining_multi") and not is_admin:
         mt = user.get("mining_multi_type", "multi")
+        # GUARD #1b: Auto-reset jika stuck > 30 menit (bot restart, crash, dll)
+        started_raw = user.get("mining_multi_started")
+        is_stuck = False
+        if started_raw:
+            try:
+                started_dt = datetime.fromisoformat(started_raw)
+                stuck_secs = (datetime.now() - started_dt).total_seconds()
+                if stuck_secs > 1800:  # 30 menit
+                    is_stuck = True
+            except Exception:
+                is_stuck = True
+        if is_stuck:
+            await set_mining_multi_status(uid, False)
+        else:
+            await callback.answer(
+                f"⏳ Sedang mining {mt}! Tunggu hingga selesai.",
+                show_alert=True
+            )
+            return
+
+    # GUARD #2: Cek cooldown sebelum mulai (bukan admin)
+    if not is_admin:
+        can_mine, cd_msg = await check_mine_cooldown(user, is_admin)
+        if not can_mine:
+            await callback.answer(cd_msg[:200], show_alert=True)
+            return
+
+    # GUARD #3: Cek energy cukup sebelum mulai
+    from config import TOOLS as _TOOLS
+    tool_id = user.get("current_tool", "stone_pick")
+    tool = _TOOLS.get(tool_id, _TOOLS["stone_pick"])
+    energy_cost = tool.get("energy_cost", 1)
+    if not is_admin and user.get("energy", 0) < energy_cost:
         await callback.answer(
-            f"⏳ Sedang mining {mt}! Tunggu hingga selesai.",
+            f"⚡ Energy tidak cukup! ({user.get('energy',0)}/{user.get('max_energy',100)})\n"
+            f"Butuh minimal {energy_cost} energy.",
             show_alert=True
         )
         return
 
-    multi_label = f"x{count}"
+    # GUARD #4: Cek bag tidak penuh sebelum mulai
+    if not is_admin:
+        ore_inv = user.get("ore_inventory", {})
+        total_ore_in_bag = sum(ore_inv.values())
+        bag_slots = user.get("bag_slots", 50)
+        if total_ore_in_bag >= bag_slots:
+            await callback.answer(
+                f"🎒 Bag penuh! ({total_ore_in_bag}/{bag_slots} slot)\n"
+                f"Jual ore dulu di Market sebelum mining.",
+                show_alert=True
+            )
+            return
 
-    # Hitung estimasi total waktu tunggu
+    multi_label = f"x{count}"
     cd_secs = get_mine_cooldown_seconds(user, is_admin)
-    total_wait_secs = cd_secs * (count - 1) if not is_admin else 0
+    total_wait_secs = cd_secs * count if not is_admin else 0
     eta_str = _format_duration(total_wait_secs) if total_wait_secs > 0 else "Sebentar"
 
-    await callback.answer(f"⛏️ Mining {multi_label}... Harap tunggu!")
-
-    # Set status mining multi
+    # GUARD #5: Set flag SEBELUM callback.answer agar tidak ada double-tap
     if not is_admin:
         await set_mining_multi_status(uid, True, multi_label)
 
-    start_time = time.time()
+    await callback.answer(f"⛏️ Mining {multi_label}... Harap tunggu!")
 
-    # Update pesan awal dengan estimasi waktu
     try:
         await callback.message.edit_text(
             f"⛏️ *Sedang Mining {multi_label}...*\n"
@@ -277,50 +325,86 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
     total_xp   = 0
     total_kg   = 0.0
     ores_found = {}
+    ore_ids_found = {}
     specials   = []
     crits = luckies = level_ups = 0
     new_ach    = []
     last_error = None
+    mines_done = 0
 
     try:
         for i in range(count):
             user = await get_user(uid)
             if not user:
+                last_error = "User tidak ditemukan"
                 break
-            # FIX bug double-sleep: cek cooldown di sini dihapus.
-            # asyncio.sleep sudah ada di akhir loop, sehingga tidak
-            # perlu cek ulang di sini (akibat: 2x cooldown per mine).
+
+            # GUARD #6: Cek energy tiap iterasi (bukan hanya di awal)
+            if not is_admin:
+                fresh_tool = _TOOLS.get(user.get("current_tool", "stone_pick"), _TOOLS["stone_pick"])
+                if user.get("energy", 0) < fresh_tool.get("energy_cost", 1):
+                    last_error = (
+                        f"Energy habis di mine ke-{i+1}! "
+                        f"({user.get('energy',0)}/{user.get('max_energy',100)})"
+                    )
+                    break
+
+            # GUARD #7: Cek bag tiap iterasi agar tidak overflow diam-diam
+            if not is_admin:
+                ore_inv = user.get("ore_inventory", {})
+                if sum(ore_inv.values()) >= user.get("bag_slots", 50):
+                    last_error = (
+                        f"Bag penuh di mine ke-{i+1}! "
+                        f"({sum(ore_inv.values())}/{user.get('bag_slots',50)} slot)"
+                    )
+                    break
 
             r = await perform_mine(uid, is_admin=is_admin)
             if not r["ok"]:
-                last_error = r["msg"]
+                # Strip markdown dari pesan error agar tidak konflik format
+                err_raw = r["msg"]
+                err_clean = err_raw.replace("*", "").replace("`", "").replace("_", "")
+                last_error = err_clean
                 break
+
+            mines_done += 1
             total_xp   += r["xp_gain"]
             total_kg   += r.get("ore_kg", 0.0)
-            ore_key = f"{r['ore']['emoji']} {r['ore']['name']}"
+            ore_obj = r.get("ore", {})
+            ore_key = f"{ore_obj.get('emoji','')} {ore_obj.get('name','?')}"
             ores_found[ore_key] = ores_found.get(ore_key, 0) + 1
+            ore_id_key = r.get("ore_id", "") or ore_obj.get("id", "")
+            if ore_id_key:
+                ore_ids_found[ore_id_key] = ore_ids_found.get(ore_id_key, 0) + 1
             if r["is_crit"]:    crits += 1
             if r["is_lucky"]:   luckies += 1
-            if r["special_hit"]: specials.append(r["special_hit"])
+            if r.get("special_hit"): specials.append(r["special_hit"])
             if r["leveled_up"]: level_ups += 1
             new_ach.extend(r.get("new_achievements", []))
 
+            # GUARD #8: Cooldown diambil dari user fresh (bukan snapshot lama)
             if not is_admin and i < count - 1:
-                # Gunakan cooldown_secs dari result (sudah hitung buff terkini)
-                cd = r.get("cooldown_secs") or get_mine_cooldown_seconds(user, is_admin)
-                await asyncio.sleep(cd)
+                fresh_user = await get_user(uid)
+                cd = get_mine_cooldown_seconds(fresh_user, is_admin) if fresh_user else cd_secs
+                await asyncio.sleep(cd + 0.5)  # +0.5s buffer agar tidak race condition
+
+    except asyncio.CancelledError:
+        last_error = "Mining dibatalkan"
     except Exception as _e:
-        last_error = f"⚠️ Mining dihentikan karena error: {_e}"
+        last_error = f"Mining dihentikan karena error: {_e}"
     finally:
-        # Selalu hapus status mining, bahkan jika terjadi exception
+        # GUARD #9: Selalu reset status mining multi (termasuk saat error/exception/crash)
         if not is_admin:
             await set_mining_multi_status(uid, False)
 
     ore_lines = "\n".join(f"   {k}: x{v}" for k, v in ores_found.items()) or "   Tidak ada"
     user = await get_user(uid)
 
+    # BUG FIX #7: Tampilkan berapa mine yang berhasil dilakukan jika tidak full
+    selesai_label = f"{mines_done}/{count}" if mines_done < count else multi_label
+
     lines = [
-        f"✅ *Mining {multi_label} Selesai!*",
+        f"✅ *Mining {selesai_label} Selesai!*",
         "━━━━━━━━━━━━━━━━━━━━",
         "",
         f"🪨 *Bijih Ditemukan:*\n{ore_lines}",
@@ -343,13 +427,39 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
         lines.append(f"⚡ Energy: `{user['energy']}/{user['max_energy']}`")
 
     text = "\n".join(lines)
+
+    # Kirim foto ore yang ditemukan (maks 1 foto agar tidak error media group)
+    ore_photos = []
+    for oid in list(ore_ids_found.keys())[:1]:
+        op = await get_ore_photo(oid)
+        if op:
+            ore_photos.append(op["photo_id"])
+
     try:
-        await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+        if ore_photos:
+            await callback.message.answer_photo(
+                photo=ore_photos[0],
+                caption=text,
+                reply_markup=mine_action_kb(),
+                parse_mode="Markdown"
+            )
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+        else:
+            try:
+                await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+            except Exception:
+                await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
     except Exception:
         try:
-            await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+            await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
         except Exception:
-            pass
+            try:
+                await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+            except Exception:
+                pass
 
 
 @router.callback_query(F.data == "do_mine_5")
@@ -396,9 +506,7 @@ async def cb_equip(callback: CallbackQuery):
     await callback.answer(msg[:200], show_alert=not ok)
     if ok:
         user = await get_user(callback.from_user.id)
-        # Cek dan tampilkan foto alat jika ada
         tool_photo = await get_tool_photo(tool_id)
-        tool = TOOLS.get(tool_id, {})
         text = f"⚒️ *Ganti Alat*\n\n{msg}"
         kb = equip_menu_kb(user["owned_tools"], user["current_tool"])
         if tool_photo:
@@ -446,9 +554,7 @@ async def cb_set_zone(callback: CallbackQuery):
     await callback.answer(msg[:200], show_alert=not ok)
     if ok:
         user = await get_user(callback.from_user.id)
-        zone = ZONES.get(zone_id, {})
         ore_list = _zone_ore_list(zone_id)
-        # Cek foto zona
         zone_photo = await get_zone_photo(zone_id)
         text = (
             f"📍 *Zona Mining*\n\n{msg}\n\n"
@@ -476,9 +582,60 @@ async def cb_set_zone(callback: CallbackQuery):
                 pass
 
 
+@router.message(Command("resetmining"))
+async def cmd_reset_mining(message: Message):
+    """Command untuk pemain yang stuck saat mining multi (x5, x10, x25, x50).
+    Mereset flag is_mining_multi agar pemain bisa mining kembali."""
+    uid = message.from_user.id
+    user = await get_user(uid)
+
+    if not user:
+        await message.answer("❌ Ketik /start terlebih dahulu.")
+        return
+
+    if not user.get("is_mining_multi"):
+        await message.answer(
+            "✅ *Status Mining Normal*\n\n"
+            "Kamu tidak sedang dalam kondisi stuck mining.\n"
+            "Tidak perlu reset! Kamu bisa langsung mining seperti biasa.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Cek apakah mining baru saja dimulai (< 2 menit) — hindari abuse reset
+    started_raw = user.get("mining_multi_started")
+    if started_raw and not _is_admin(uid):
+        try:
+            started_dt = datetime.fromisoformat(started_raw)
+            elapsed_secs = (datetime.now() - started_dt).total_seconds()
+            if elapsed_secs < 120:  # 2 menit cooldown sebelum boleh reset
+                remaining = int(120 - elapsed_secs)
+                await message.answer(
+                    f"⏳ *Mining Baru Saja Dimulai*\n\n"
+                    f"Mining baru berjalan `{int(elapsed_secs)}` detik.\n"
+                    f"Tunggu `{remaining}` detik lagi sebelum bisa reset.\n\n"
+                    f"💡 _Gunakan /resetmining jika mining benar-benar stuck._",
+                    parse_mode="Markdown"
+                )
+                return
+        except Exception:
+            pass  # Jika parse gagal, lanjut reset
+
+    multi_type = user.get("mining_multi_type", "multi")
+    await set_mining_multi_status(uid, False)
+
+    await message.answer(
+        f"🔄 *Reset Mining Berhasil!*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"✅ Status mining {multi_type} telah direset.\n"
+        f"Kamu sekarang bisa mulai mining kembali.\n\n"
+        f"⛏️ Ketik /mine atau tekan tombol *⛏️ Mining* untuk memulai.",
+        parse_mode="Markdown"
+    )
+
+
 @router.message(Command("rare_ore"))
 async def cmd_rare_ore(message: Message):
-    """Lihat semua ore rare (bisa dilihat semua pemain)."""
     tier_order = ["legendary", "mythical", "cosmic", "divine", "epic"]
     lines = ["💎 *Daftar Ore Rare di Mining Bot*\n"]
     for tier in tier_order:
