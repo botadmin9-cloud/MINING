@@ -12,6 +12,7 @@ from game import (perform_mine, build_mine_result_text, regen_energy,
                    get_mine_cooldown_seconds, check_mine_cooldown, is_vip_active)
 from config import format_kg, xp_for_level
 from keyboards import mine_action_kb, equip_menu_kb, zone_menu_kb, main_menu_kb
+from middlewares import register_message_owner
 
 router = Router()
 
@@ -139,10 +140,12 @@ async def show_mine(message: Message):
     text, photo_id = result if isinstance(result, tuple) else (result, None)
     kb = mine_action_kb()
     if photo_id:
-        await message.answer_photo(photo=photo_id, caption=text,
+        _sent = await message.answer_photo(photo=photo_id, caption=text,
                                    reply_markup=kb, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
     else:
-        await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        _sent = await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.callback_query(F.data == "mine_menu")
@@ -152,16 +155,19 @@ async def cb_mine_menu(callback: CallbackQuery):
     kb = mine_action_kb()
     try:
         if photo_id:
-            await callback.message.answer_photo(photo=photo_id, caption=text,
+            _sent = await callback.message.answer_photo(photo=photo_id, caption=text,
                                                   reply_markup=kb, parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             await callback.message.delete()
         else:
             try:
                 await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
             except Exception:
-                await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+                _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
     except Exception:
-        await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        _sent = await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
     await callback.answer()
 
 
@@ -192,30 +198,38 @@ async def cb_do_mine(callback: CallbackQuery):
     result = await perform_mine(uid, is_admin=is_admin)
     if result["ok"]:
         text = build_mine_result_text(result)
-        # FIX 5: Tampilkan foto ore yang didapat
-        ore_id = result.get("ore_id") or result.get("ore", {}).get("id")
+        # Tampilkan foto ore yang didapat (ore_id sudah tersimpan langsung di result)
+        ore_id = result.get("ore_id")
         ore_photo = await get_ore_photo(ore_id) if ore_id else None
         if ore_photo:
             try:
-                await callback.message.answer_photo(
+                _sent = await callback.message.answer_photo(
                     photo=ore_photo["photo_id"],
                     caption=text,
                     reply_markup=mine_action_kb(),
                     parse_mode="Markdown"
                 )
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
                 await callback.message.delete()
                 await callback.answer()
                 return
             except Exception:
                 pass
+        # Fallback: tampilkan sebagai teks biasa (tanpa foto)
+        try:
+            await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+        except Exception:
+            _sent = await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
+        await callback.answer()
     else:
         text = result["msg"]
-
-    try:
-        await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
-    except Exception:
-        pass
-    await callback.answer()
+        try:
+            await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+        except Exception:
+            _sent = await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
+        await callback.answer()
 
 
 def _format_duration(seconds: float) -> str:
@@ -437,12 +451,13 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
 
     try:
         if ore_photos:
-            await callback.message.answer_photo(
+            _sent = await callback.message.answer_photo(
                 photo=ore_photos[0],
                 caption=text,
                 reply_markup=mine_action_kb(),
                 parse_mode="Markdown"
             )
+            if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             try:
                 await callback.message.delete()
             except Exception:
@@ -451,13 +466,15 @@ async def _do_mine_multi(callback: CallbackQuery, count: int):
             try:
                 await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
             except Exception:
-                await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+                _sent = await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
     except Exception:
         try:
             await callback.message.edit_text(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
         except Exception:
             try:
-                await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+                _sent = await callback.message.answer(text, reply_markup=mine_action_kb(), parse_mode="Markdown")
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
             except Exception:
                 pass
 
@@ -511,12 +528,13 @@ async def cb_equip(callback: CallbackQuery):
         kb = equip_menu_kb(user["owned_tools"], user["current_tool"])
         if tool_photo:
             try:
-                await callback.message.answer_photo(
+                _sent = await callback.message.answer_photo(
                     photo=tool_photo["photo_id"],
                     caption=text,
                     reply_markup=kb,
                     parse_mode="Markdown"
                 )
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
                 await callback.message.delete()
             except Exception:
                 try:
@@ -563,12 +581,13 @@ async def cb_set_zone(callback: CallbackQuery):
         kb = zone_menu_kb(user["unlocked_zones"], user.get("current_zone", "surface"))
         if zone_photo:
             try:
-                await callback.message.answer_photo(
+                _sent = await callback.message.answer_photo(
                     photo=zone_photo["photo_id"],
                     caption=text,
                     reply_markup=kb,
                     parse_mode="Markdown"
                 )
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, callback.from_user.id)
                 await callback.message.delete()
             except Exception:
                 try:
@@ -590,16 +609,18 @@ async def cmd_reset_mining(message: Message):
     user = await get_user(uid)
 
     if not user:
-        await message.answer("❌ Ketik /start terlebih dahulu.")
+        _sent = await message.answer("❌ Ketik /start terlebih dahulu.")
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     if not user.get("is_mining_multi"):
-        await message.answer(
+        _sent = await message.answer(
             "✅ *Status Mining Normal*\n\n"
             "Kamu tidak sedang dalam kondisi stuck mining.\n"
             "Tidak perlu reset! Kamu bisa langsung mining seperti biasa.",
             parse_mode="Markdown"
         )
+        if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
         return
 
     # Cek apakah mining baru saja dimulai (< 2 menit) — hindari abuse reset
@@ -610,13 +631,14 @@ async def cmd_reset_mining(message: Message):
             elapsed_secs = (datetime.now() - started_dt).total_seconds()
             if elapsed_secs < 120:  # 2 menit cooldown sebelum boleh reset
                 remaining = int(120 - elapsed_secs)
-                await message.answer(
+                _sent = await message.answer(
                     f"⏳ *Mining Baru Saja Dimulai*\n\n"
                     f"Mining baru berjalan `{int(elapsed_secs)}` detik.\n"
                     f"Tunggu `{remaining}` detik lagi sebelum bisa reset.\n\n"
                     f"💡 _Gunakan /resetmining jika mining benar-benar stuck._",
                     parse_mode="Markdown"
                 )
+                if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
                 return
         except Exception:
             pass  # Jika parse gagal, lanjut reset
@@ -624,7 +646,7 @@ async def cmd_reset_mining(message: Message):
     multi_type = user.get("mining_multi_type", "multi")
     await set_mining_multi_status(uid, False)
 
-    await message.answer(
+    _sent = await message.answer(
         f"🔄 *Reset Mining Berhasil!*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"✅ Status mining {multi_type} telah direset.\n"
@@ -632,6 +654,7 @@ async def cmd_reset_mining(message: Message):
         f"⛏️ Ketik /mine atau tekan tombol *⛏️ Mining* untuk memulai.",
         parse_mode="Markdown"
     )
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
 
 
 @router.message(Command("rare_ore"))
@@ -655,4 +678,5 @@ async def cmd_rare_ore(message: Message):
     text = "\n".join(lines)
     if len(text) > 4096:
         text = text[:4090] + "\n..."
-    await message.answer(text, parse_mode="Markdown")
+    _sent = await message.answer(text, parse_mode="Markdown")
+    if _sent: register_message_owner(_sent.chat.id, _sent.message_id, message.from_user.id)
